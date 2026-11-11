@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 import prompts  # noqa: E402
 from bench import BenchResult, FakeBench, RealBench  # noqa: E402
-from llm import ClaudeClient, FakeClient  # noqa: E402
+from llm import ClaudeClient, ClaudeCodeClient, FakeClient, UsageLimitError  # noqa: E402
 
 
 def load_config(path: str) -> dict:
@@ -45,7 +45,7 @@ def main():
     reference = prompts.load_reference_code(Path(run["definition_json"]))
     seed = prompts.make_seed_kernel(reference, run["entry_point"])
     system = prompts.build_system(run)
-    task = prompts.build_task(reference, seed, run["max_iterations"])
+    task = prompts.build_task(reference, seed, run["max_iterations"], cfg.get("bench", {}))
 
     if args.fake:
         llm = FakeClient(
@@ -61,13 +61,26 @@ def main():
         )
         bench = FakeBench()
     else:
-        llm = ClaudeClient(
-            model=tier["model"],
-            max_tokens=run["max_output_tokens"],
-            temperature=run.get("temperature"),
-            price_in_per_mtok=tier.get("price_in_per_mtok"),
-            price_out_per_mtok=tier.get("price_out_per_mtok"),
-        )
+        backend = tier.get("backend", run.get("backend", "claude_code"))
+        if backend == "claude_code":
+            llm = ClaudeCodeClient(
+                model=tier["model"],
+                claude_path=run.get("claude_path"),
+                effort=tier.get("effort", run.get("effort")),
+                timeout_s=run.get("llm_timeout_s", 1800),
+                wait_minutes=run.get("limit_wait_minutes", 15),
+                max_wait_hours=run.get("limit_max_wait_hours", 8),
+            )
+        elif backend == "api":
+            llm = ClaudeClient(
+                model=tier["model"],
+                max_tokens=run["max_output_tokens"],
+                temperature=run.get("temperature"),
+                price_in_per_mtok=tier.get("price_in_per_mtok"),
+                price_out_per_mtok=tier.get("price_out_per_mtok"),
+            )
+        else:
+            raise SystemExit(f"Unknown backend '{backend}' (use claude_code or api)")
         bench = RealBench(
             repo_root=Path(run["repo_root"]),
             dataset_path=run["dataset_path"],
@@ -91,6 +104,8 @@ def main():
     last_result: BenchResult | None = None
     since_improve = 0
     stop_reason = "max_iterations"
+    model_ids: set = set()
+    total_llm_s = total_bench_s = 0.0
 
     for attempt in range(1, max_it + 1):
         if attempt == 1:
@@ -102,8 +117,15 @@ def main():
             )
 
         t0 = time.time()
-        reply = llm.generate(system, user_msg)
-        llm_s = time.time() - t0
+        try:
+            reply = llm.generate(system, user_msg)
+        except UsageLimitError as e:
+            print(f"Stopping: {e}")
+            stop_reason = "usage_limit"
+            break
+        llm_s = time.time() - t0 - getattr(reply, "wait_seconds", 0.0)
+        if getattr(reply, "model_id", None):
+            model_ids.add(reply.model_id)
         total_in += reply.input_tokens
         total_out += reply.output_tokens
         if reply.cost_usd is None:
@@ -123,6 +145,8 @@ def main():
             result = bench.run(code)
             bench_s = time.time() - t1
 
+        total_llm_s += llm_s
+        total_bench_s += bench_s
         improved = False
         if result.status == "CORRECT":
             if first_correct is None:
@@ -144,6 +168,7 @@ def main():
             "cost_usd": reply.cost_usd,
             "cumulative_cost_usd": total_cost if cost_known else None,
             "llm_seconds": round(llm_s, 2),
+            "model_id": getattr(reply, "model_id", None),
             "bench_seconds": round(bench_s, 2),
             "best_speedup_so_far": best_speedup,
         }
@@ -169,7 +194,7 @@ def main():
         "model": tier.get("model"),
         "run_id": args.run_id,
         "fake": args.fake,
-        "attempts_made": attempt,
+        "attempts_made": attempt - 1 if stop_reason == "usage_limit" else attempt,
         "stop_reason": stop_reason,
         "iterations_to_first_correct": first_correct,
         "best_mean_speedup": best_speedup,
@@ -179,7 +204,11 @@ def main():
         "total_cost_usd": total_cost if cost_known else None,
         "settings": {k: run.get(k) for k in ("max_iterations", "max_output_tokens", "temperature", "gpu_name")},
         "bench_settings": cfg.get("bench", {}),
-        "model": tier.get("model"),
+        "model_ids_used": sorted(model_ids),
+        "total_llm_seconds": round(total_llm_s, 1),
+        "total_bench_seconds": round(total_bench_s, 1),
+        "cost_note": "API-equivalent estimate from Claude Code; not billed (subscription)"
+                     if tier.get("backend", run.get("backend", "claude_code")) == "claude_code" else None,
     }
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     if best_kernel:

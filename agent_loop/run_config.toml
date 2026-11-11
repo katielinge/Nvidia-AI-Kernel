@@ -2,9 +2,14 @@
 [run]
 output_dir = "agent_runs"
 max_iterations = 15            # TEAM DECISION
-max_output_tokens = 16000      # TEAM DECISION
-# temperature = 1.0            # TEAM DECISION. Leave commented out to use the API default.
-cost_cap_usd = 25.0            # stop a single run when its API cost reaches this. TEAM DECISION
+max_output_tokens = 16000      # used only by the paid-API backend
+# temperature = 1.0            # paid-API backend only; Claude Code uses the default sampling
+# cost_cap_usd = 25.0          # optional: stop a run when its API-EQUIVALENT cost reaches this
+# effort = "high"              # optional: Claude Code effort level, same for every tier
+limit_wait_minutes = 15        # if the subscription usage limit is hit, wait this long and retry
+limit_max_wait_hours = 8       # ...for at most this long, then stop the run cleanly
+llm_timeout_s = 1800
+# claude_path = "C:\\Users\\Katie\\.local\\bin\\claude.exe"   # only if `claude` isn't found automatically
 # no_improve_patience = 5      # optional: stop after N correct attempts without improvement
 max_error_lines = 40
 benchmark_timeout_s = 1800
@@ -33,19 +38,17 @@ stop_on_fail = true              # one failing workload zeros the kernel, so sto
 # rtol = 0.01                    # rtol=0.01, matched_ratio=0.95. Uncomment to change.
 # matched_ratio = 0.95
 
-# One section per model tier. Fill in the exact model IDs and prices from Anthropic's docs.
-# Prices are USD per million tokens. If left out, only tokens are logged (no cost).
+# Model tiers. backend = "claude_code" uses the Claude Code CLI with your Claude subscription
+# login (no API key, nothing billed). The alias picks the newest model of that tier; the exact
+# model ID that answered is recorded in each run's summary.json ("model_ids_used").
 [tiers.haiku]
-model = "FILL-IN-HAIKU-MODEL-ID"
-# price_in_per_mtok = 0.0
-# price_out_per_mtok = 0.0
+backend = "claude_code"
+model = "haiku"
 
 [tiers.sonnet]
-model = "FILL-IN-SONNET-MODEL-ID"
-# price_in_per_mtok = 0.0
-# price_out_per_mtok = 0.0
+backend = "claude_code"
+model = "sonnet"
 
 [tiers.opus]
-model = "FILL-IN-OPUS-MODEL-ID"
-# price_in_per_mtok = 0.0
-# price_out_per_mtok = 0.0
+backend = "claude_code"
+model = "opus"

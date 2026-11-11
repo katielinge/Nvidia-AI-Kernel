@@ -1,0 +1,54 @@
+# Settings shared by EVERY tier. Change these only as a team, and keep a copy with the results.
+[run]
+output_dir = "agent_runs_smoke"
+max_iterations = 2
+max_output_tokens = 16000      # used only by the paid-API backend
+# temperature = 1.0            # paid-API backend only; Claude Code uses the default sampling
+# cost_cap_usd = 25.0          # optional: stop a run when its API-EQUIVALENT cost reaches this
+# effort = "high"              # optional: Claude Code effort level, same for every tier
+limit_wait_minutes = 15        # if the subscription usage limit is hit, wait this long and retry
+limit_max_wait_hours = 8       # ...for at most this long, then stop the run cleanly
+llm_timeout_s = 1800
+# claude_path = "C:\\Users\\Katie\\.local\\bin\\claude.exe"   # only if `claude` isn't found automatically
+# no_improve_patience = 5      # optional: stop after N correct attempts without improvement
+max_error_lines = 40
+benchmark_timeout_s = 1800
+
+gpu_name = "NVIDIA GeForce RTX 5060 Laptop GPU"
+compute_capability = "12.0"
+gpu_memory_gb = 8
+entry_point = "kernel"
+
+# Paths, relative to the Nvidia-AI-Kernel folder (run the loop from there)
+repo_root = "."
+dataset_path = "../mlsys26-contest"
+definition_json = "../mlsys26-contest/definitions/moe/moe_fp8_block_scale_ds_routing_topk8_ng8_kg4_e32_h7168_i2048.json"
+definition_name = "moe_fp8_block_scale_ds_routing_topk8_ng8_kg4_e32_h7168_i2048"
+
+# Benchmark settings used for EVERY attempt's feedback (same for all tiers). TEAM DECISION.
+# The final numbers for the report come from a separate full run (5 trials x 100 iters)
+# of each run's best_kernel.py with local_bench.py.
+[bench]
+warmup_runs = 3
+iterations = 20
+num_trials = 3
+ref_cache = "ref_latency.json"   # reference timed once, reused by every attempt and tier
+stop_on_fail = true              # one failing workload zeros the kernel, so stop early
+# atol = 0.01                    # TEAM DECISION: tool default for this MoE is atol=0.01,
+# rtol = 0.01                    # rtol=0.01, matched_ratio=0.95. Uncomment to change.
+# matched_ratio = 0.95
+
+# Model tiers. backend = "claude_code" uses the Claude Code CLI with your Claude subscription
+# login (no API key, nothing billed). The alias picks the newest model of that tier; the exact
+# model ID that answered is recorded in each run's summary.json ("model_ids_used").
+[tiers.haiku]
+backend = "claude_code"
+model = "haiku"
+
+[tiers.sonnet]
+backend = "claude_code"
+model = "sonnet"
+
+[tiers.opus]
+backend = "claude_code"
+model = "opus"

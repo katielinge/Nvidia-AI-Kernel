@@ -23,6 +23,7 @@ class BenchResult:
     mean_speedup: float | None = None
     workloads: list = field(default_factory=list)  # dicts: id, latency_ms, reference_latency_ms, speedup
     raw_statuses: dict = field(default_factory=dict)  # status string -> count, for debugging
+    min_matched_ratio: float | None = None  # lowest fraction of elements within tolerance
 
 
 def classify_status(raw: str) -> str:
@@ -71,6 +72,9 @@ def summarize(results: dict, definition: str | None = None) -> BenchResult:
             kinds.add(kind)
             res.n_failed += 1
             res.failing_ids.append(wid[:8])
+        mr = e.get("matched_ratio")
+        if mr is not None:
+            res.min_matched_ratio = mr if res.min_matched_ratio is None else min(res.min_matched_ratio, mr)
         for key, attr in (("max_abs_error", "max_abs_error"), ("max_rel_error", "max_rel_error")):
             v = e.get(key)
             if v is not None:

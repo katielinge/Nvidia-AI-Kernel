@@ -66,8 +66,10 @@ Output: `[seq_len, 7168]`, bfloat16.
 - Accumulate in float32 and cast to bfloat16 only at the end.
 
 ### Correctness check
-Your output is compared with the reference using atol=1, rtol=0.3, and at least 90% of
-elements must match. If any workload fails, the whole kernel counts as failed.
+Your output is compared element by element with the reference. An element fails only if BOTH
+its absolute error > {atol} AND its relative error > {rtol}. At least {matched_pct}% of elements must
+pass, on every workload ({n_workloads} workloads with different numbers of tokens). If any
+workload fails, the whole kernel counts as failed.
 
 ### Scoring
 Score = mean over workloads of (reference latency / your latency). Higher is better, but only
@@ -123,9 +125,23 @@ def build_system(cfg: dict) -> str:
     )
 
 
-def build_task(reference_code: str, seed_kernel: str, max_iterations: int) -> str:
+def tolerance(bench_cfg: dict | None) -> dict:
+    """The correctness rule the benchmark actually uses (FlashInfer-Bench LowBitEvaluator defaults)."""
+    b = bench_cfg or {}
+    return {
+        "atol": b.get("atol", 0.01),
+        "rtol": b.get("rtol", 0.01),
+        "matched_ratio": b.get("matched_ratio", 0.95),
+    }
+
+
+def build_task(reference_code: str, seed_kernel: str, max_iterations: int,
+               bench_cfg: dict | None = None, n_workloads: int = 19) -> str:
+    tol = tolerance(bench_cfg)
     return TASK_PROMPT.format(
-        reference_code=reference_code, seed_kernel=seed_kernel, max_iterations=max_iterations
+        reference_code=reference_code, seed_kernel=seed_kernel, max_iterations=max_iterations,
+        atol=tol["atol"], rtol=tol["rtol"], matched_pct=round(tol["matched_ratio"] * 100),
+        n_workloads=n_workloads,
     )
 
 
@@ -154,11 +170,16 @@ def build_feedback(
             f"{truncate_lines(result.error_text, max_error_lines)}\n```"
         )
     elif result.status == "INCORRECT":
+        checked = result.n_total
+        mr = getattr(result, "min_matched_ratio", None)
         parts.append(
-            f"Failing workloads: {result.n_failed} of {result.n_total}.\n"
-            f"Worst case: max absolute error {result.max_abs_error}, "
-            f"max relative error {result.max_rel_error}.\n"
-            f"Example failing workload ids: {', '.join(result.failing_ids[:5])}"
+            f"Workloads checked: {checked} (checking stops at the first failing workload); "
+            f"failed: {result.n_failed}.\n"
+            f"On the failing workload: max absolute error {result.max_abs_error}, "
+            f"max relative error {result.max_rel_error}"
+            + (f", fraction of output elements within tolerance {mr:.3f}" if mr is not None else "")
+            + ".\n"
+            f"Failing workload ids: {', '.join(result.failing_ids[:5])}"
         )
         if result.error_text:
             parts.append(
