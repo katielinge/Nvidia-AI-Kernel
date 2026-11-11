@@ -1,0 +1,33 @@
+{
+  "tier": "opus",
+  "model": "opus",
+  "run_id": "3",
+  "fake": false,
+  "attempts_made": 15,
+  "stop_reason": "max_iterations",
+  "iterations_to_first_correct": 3,
+  "best_mean_speedup": 19.698515118972534,
+  "best_attempt": 14,
+  "total_input_tokens": 135058,
+  "total_output_tokens": 112239,
+  "total_cost_usd": 3.259604,
+  "settings": {
+    "max_iterations": 15,
+    "max_output_tokens": 16000,
+    "temperature": null,
+    "gpu_name": "NVIDIA GeForce RTX 5060 Laptop GPU"
+  },
+  "bench_settings": {
+    "warmup_runs": 3,
+    "iterations": 20,
+    "num_trials": 3,
+    "ref_cache": "ref_latency.json",
+    "stop_on_fail": true
+  },
+  "model_ids_used": [
+    "claude-opus-5-5"
+  ],
+  "total_llm_seconds": 883.4,
+  "total_bench_seconds": 958.2,
+  "cost_note": "API-equivalent estimate from Claude Code; not billed (subscription)"
+}

@@ -1,0 +1,20 @@
+{
+  "moe_fp8_block_scale_ds_routing_topk8_ng8_kg4_e32_h7168_i2048": {
+    "b8f4f012-a32e-4356-b4e1-7665b3d598af": {
+      "status": "INCORRECT_NUMERICAL",
+      "solution": "llm-tier-moe-v1",
+      "max_abs_error": 4096.0,
+      "max_rel_error": 69.6103286743164,
+      "matched_ratio": 0.9164939413265306,
+      "log": ""
+    },
+    "e05c6c03-5603-4a1c-b34c-dcce0ecaeea4": {
+      "status": "INCORRECT_NUMERICAL",
+      "solution": "llm-tier-moe-v1",
+      "max_abs_error": 2048.0,
+      "max_rel_error": 47.0,
+      "matched_ratio": 0.693359375,
+      "log": ""
+    }
+  }
+}

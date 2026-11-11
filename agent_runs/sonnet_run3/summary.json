@@ -1,0 +1,33 @@
+{
+  "tier": "sonnet",
+  "model": "sonnet",
+  "run_id": "3",
+  "fake": false,
+  "attempts_made": 15,
+  "stop_reason": "max_iterations",
+  "iterations_to_first_correct": 2,
+  "best_mean_speedup": 17.542542079145818,
+  "best_attempt": 11,
+  "total_input_tokens": 103561,
+  "total_output_tokens": 70399,
+  "total_cost_usd": 1.085414,
+  "settings": {
+    "max_iterations": 15,
+    "max_output_tokens": 16000,
+    "temperature": null,
+    "gpu_name": "NVIDIA GeForce RTX 5060 Laptop GPU"
+  },
+  "bench_settings": {
+    "warmup_runs": 3,
+    "iterations": 20,
+    "num_trials": 3,
+    "ref_cache": "ref_latency.json",
+    "stop_on_fail": true
+  },
+  "model_ids_used": [
+    "claude-sonnet-5-5"
+  ],
+  "total_llm_seconds": 398.3,
+  "total_bench_seconds": 1404.5,
+  "cost_note": "API-equivalent estimate from Claude Code; not billed (subscription)"
+}

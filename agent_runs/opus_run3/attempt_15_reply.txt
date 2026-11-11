@@ -1,0 +1,288 @@
+```python
+import torch
+import triton
+import triton.language as tl
+
+H_DIM = 7168
+I_DIM = 2048
+E_LOCAL = 32
+_FP8_OK = [True]
+
+
+@triton.jit
+def _swizzle(pid, num_m, num_n, GROUP_M: tl.constexpr):
+    num_in_group = GROUP_M * num_n
+    group_id = pid // num_in_group
+    first_m = group_id * GROUP_M
+    gsz = tl.minimum(num_m - first_m, GROUP_M)
+    r = pid % num_in_group
+    pid_m = first_m + r % gsz
+    pid_n = r // gsz
+    return pid_m, pid_n
+
+
+@triton.autotune(
+    configs=[
+        triton.Config({'BK': 128}, num_warps=4, num_stages=3),
+        triton.Config({'BK': 128}, num_warps=4, num_stages=4),
+        triton.Config({'BK': 128}, num_warps=8, num_stages=2),
+        triton.Config({'BK': 128}, num_warps=8, num_stages=3),
+        triton.Config({'BK': 64}, num_warps=4, num_stages=3),
+        triton.Config({'BK': 64}, num_warps=4, num_stages=4),
+        triton.Config({'BK': 64}, num_warps=8, num_stages=4),
+        triton.Config({'BK': 64}, num_warps=8, num_stages=3),
+        triton.Config({'BK': 64}, num_warps=8, num_stages=5),
+    ],
+    key=['BM', 'FP8_DOT'],
+)
+@triton.jit
+def _gemm1_swiglu_kernel(
+    hs_ptr, hs_scale_ptr, w1_ptr, w1s_ptr,
+    sorted_tok_ptr, tile_expert_ptr, c_ptr, cs_ptr,
+    T, num_m_tiles, max_padded,
+    H: tl.constexpr, I: tl.constexpr,
+    BM: tl.constexpr, BN: tl.constexpr, BK: tl.constexpr,
+    FP8_DOT: tl.constexpr, GROUP_M: tl.constexpr,
+):
+    pid = tl.program_id(0)
+    pid_m, pid_n = _swizzle(pid, num_m_tiles, I // BN, GROUP_M)
+    expert = tl.load(tile_expert_ptr + pid_m)
+    if expert >= 32:
+        return
+    rows = pid_m * BM + tl.arange(0, BM)
+    tok = tl.load(sorted_tok_ptr + rows)
+    mask_m = tok < T
+    tok_safe = tl.where(mask_m, tok, 0)
+
+    n0 = pid_n * BN
+    offs_n = n0 + tl.arange(0, BN)
+    offs_k = tl.arange(0, BK)
+
+    a_ptrs = hs_ptr + tok_safe[:, None] * H + offs_k[None, :]
+    w_base = w1_ptr + expert.to(tl.int64) * (2 * I * H)
+    w1_ptrs = w_base + offs_n[:, None] * H + offs_k[None, :]
+    w2_ptrs = w_base + (offs_n + I)[:, None] * H + offs_k[None, :]
+    s_base = w1s_ptr + expert * ((2 * I // 128) * (H // 128))
+    s1_ptr = s_base + (n0 // 128) * (H // 128)
+    s2_ptr = s_base + ((n0 + I) // 128) * (H // 128)
+
+    acc1 = tl.zeros((BM, BN), dtype=tl.float32)
+    acc2 = tl.zeros((BM, BN), dtype=tl.float32)
+    for kb in range(0, H // BK):
+        ks = (kb * BK) // 128
+        a_s = tl.load(hs_scale_ptr + ks * T + tok_safe, mask=mask_m, other=0.0)
+        ws1 = tl.load(s1_ptr + ks)
+        ws2 = tl.load(s2_ptr + ks)
+        if FP8_DOT:
+            a = tl.load(a_ptrs)
+            b1 = tl.load(w1_ptrs)
+            b2 = tl.load(w2_ptrs)
+        else:
+            a = tl.load(a_ptrs).to(tl.bfloat16)
+            b1 = tl.load(w1_ptrs).to(tl.bfloat16)
+            b2 = tl.load(w2_ptrs).to(tl.bfloat16)
+        d1 = tl.dot(a, tl.trans(b1))
+        d2 = tl.dot(a, tl.trans(b2))
+        acc1 += d1 * (a_s[:, None] * ws1)
+        acc2 += d2 * (a_s[:, None] * ws2)
+        a_ptrs += BK
+        w1_ptrs += BK
+        w2_ptrs += BK
+
+    c = acc1 * (acc2 / (1.0 + tl.exp(-acc2)))
+    amax = tl.max(tl.abs(c), axis=1)
+    sc = tl.where(amax > 0, amax / 32768.0, 1.0)
+    c16 = (c / sc[:, None]).to(tl.float16)
+    c_ptrs = c_ptr + rows[:, None] * I + offs_n[None, :]
+    tl.store(c_ptrs, c16, mask=mask_m[:, None])
+    tl.store(cs_ptr + pid_n * max_padded + rows, sc, mask=mask_m)
+
+
+@triton.autotune(
+    configs=[
+        triton.Config({'BN': 128, 'BK': 64}, num_warps=4, num_stages=3),
+        triton.Config({'BN': 128, 'BK': 64}, num_warps=8, num_stages=3),
+        triton.Config({'BN': 128, 'BK': 64}, num_warps=8, num_stages=4),
+        triton.Config({'BN': 256, 'BK': 64}, num_warps=8, num_stages=3),
+        triton.Config({'BN': 64, 'BK': 64}, num_warps=4, num_stages=4),
+        triton.Config({'BN': 128, 'BK': 32}, num_warps=8, num_stages=4),
+        triton.Config({'BN': 64, 'BK': 128}, num_warps=4, num_stages=3),
+        triton.Config({'BN': 128, 'BK': 128}, num_warps=8, num_stages=2),
+    ],
+    key=['BM'],
+    reset_to_zero=['out_ptr'],
+)
+@triton.jit
+def _gemm2_kernel(
+    c_ptr, cs_ptr, w2_ptr, w2s_ptr,
+    sorted_tok_ptr, sorted_w_ptr, tile_expert_ptr, out_ptr,
+    T, num_m_tiles, max_padded,
+    H: tl.constexpr, I: tl.constexpr, BN1: tl.constexpr,
+    BM: tl.constexpr, BN: tl.constexpr, BK: tl.constexpr,
+    GROUP_M: tl.constexpr,
+):
+    pid = tl.program_id(0)
+    pid_m, pid_n = _swizzle(pid, num_m_tiles, H // BN, GROUP_M)
+    expert = tl.load(tile_expert_ptr + pid_m)
+    if expert >= 32:
+        return
+    rows = pid_m * BM + tl.arange(0, BM)
+    tok = tl.load(sorted_tok_ptr + rows)
+    mask_m = tok < T
+    tok_safe = tl.where(mask_m, tok, 0)
+
+    n0 = pid_n * BN
+    offs_n = n0 + tl.arange(0, BN)
+    offs_k = tl.arange(0, BK)
+
+    a_ptrs = c_ptr + rows[:, None] * I + offs_k[None, :]
+    w_ptrs = w2_ptr + expert.to(tl.int64) * (H * I) + offs_n[:, None] * I + offs_k[None, :]
+    s_ptrs = w2s_ptr + expert * ((H // 128) * (I // 128)) + (offs_n // 128) * (I // 128)
+
+    acc = tl.zeros((BM, BN), dtype=tl.float32)
+    for kb in range(0, I // BK):
+        k0 = kb * BK
+        a = tl.load(a_ptrs, mask=mask_m[:, None], other=0.0)
+        if BK > BN1:
+            # split into BN1-sized chunks with separate C scales
+            a3 = tl.reshape(a, (BM, BK // BN1, BN1))
+            cs0 = tl.load(cs_ptr + (k0 // BN1) * max_padded + rows, mask=mask_m, other=0.0)
+            cs1 = tl.load(cs_ptr + (k0 // BN1 + 1) * max_padded + rows, mask=mask_m, other=0.0)
+            a_lo, a_hi = tl.split(tl.permute(a3, (0, 2, 1)))
+            wfull = tl.load(w_ptrs).to(tl.float16)
+            w3 = tl.reshape(wfull, (BN, BK // BN1, BN1))
+            w_lo, w_hi = tl.split(tl.permute(w3, (0, 2, 1)))
+            ws = tl.load(s_ptrs + k0 // 128)
+            d = tl.dot(a_lo, tl.trans(w_lo)) * cs0[:, None]
+            d += tl.dot(a_hi, tl.trans(w_hi)) * cs1[:, None]
+            acc += d * ws[None, :]
+        else:
+            cs = tl.load(cs_ptr + (k0 // BN1) * max_padded + rows, mask=mask_m, other=0.0)
+            b = tl.trans(tl.load(w_ptrs).to(tl.float16))
+            ws = tl.load(s_ptrs + k0 // 128)
+            d = tl.dot(a, b)
+            acc += d * (cs[:, None] * ws[None, :])
+        a_ptrs += BK
+        w_ptrs += BK
+
+    wt = tl.load(sorted_w_ptr + rows, mask=mask_m, other=0.0)
+    acc = acc * wt[:, None]
+    o_ptrs = out_ptr + tok_safe[:, None] * H + offs_n[None, :]
+    tl.atomic_add(o_ptrs, acc, mask=mask_m[:, None])
+
+
+@torch.no_grad()
+def kernel(
+    routing_logits: torch.Tensor,
+    routing_bias: torch.Tensor,
+    hidden_states: torch.Tensor,
+    hidden_states_scale: torch.Tensor,
+    gemm1_weights: torch.Tensor,
+    gemm1_weights_scale: torch.Tensor,
+    gemm2_weights: torch.Tensor,
+    gemm2_weights_scale: torch.Tensor,
+    local_expert_offset: int,
+    routed_scaling_factor: float,
+):
+    H = H_DIM
+    I = I_DIM
+    T = routing_logits.shape[0]
+    E_global = routing_logits.shape[1]
+    TOP_K, N_GROUP, TOPK_GROUP = 8, 8, 4
+    device = hidden_states.device
+
+    logits = routing_logits.to(torch.float32)
+    bias = routing_bias.to(torch.float32).reshape(-1)
+    s = 1.0 / (1.0 + torch.exp(-logits))
+    s_with_bias = s + bias
+    group_size = E_global // N_GROUP
+    s_wb_grouped = s_with_bias.view(T, N_GROUP, group_size)
+    top2_vals, _ = torch.topk(s_wb_grouped, k=2, dim=2, largest=True, sorted=False)
+    group_scores = top2_vals.sum(dim=2)
+    _, group_idx = torch.topk(group_scores, k=TOPK_GROUP, dim=1, largest=True, sorted=False)
+    group_mask = torch.zeros_like(group_scores)
+    group_mask.scatter_(1, group_idx, 1.0)
+    score_mask = group_mask.unsqueeze(2).expand(T, N_GROUP, group_size).reshape(T, E_global)
+    neg_inf = torch.finfo(torch.float32).min
+    scores_pruned = s_with_bias.masked_fill(score_mask == 0, neg_inf)
+    _, topk_idx = torch.topk(scores_pruned, k=TOP_K, dim=1, largest=True, sorted=False)
+    w_sel = s.gather(1, topk_idx)
+    w_sel = (w_sel / (w_sel.sum(dim=1, keepdim=True) + 1e-20)) * routed_scaling_factor
+
+    if T <= 512:
+        BM = 16
+    elif T <= 1024:
+        BM = 32
+    elif T <= 2048:
+        BM = 64
+    else:
+        BM = 128
+    GROUP_M = 4 if BM >= 64 else 8
+    NA = T * TOP_K
+    max_tiles = min(triton.cdiv(NA, BM) + E_LOCAL, E_LOCAL * triton.cdiv(T, BM))
+    max_padded = max_tiles * BM
+
+    flat_e = (topk_idx - int(local_expert_offset)).reshape(-1)
+    valid = (flat_e >= 0) & (flat_e < E_LOCAL)
+    flat_e = torch.where(valid, flat_e, torch.full_like(flat_e, E_LOCAL))
+    order = torch.argsort(flat_e, stable=True)
+    sorted_e = flat_e[order]
+    counts = torch.bincount(flat_e, minlength=E_LOCAL + 1)[:E_LOCAL]
+    padded = (counts + BM - 1) // BM * BM
+    pad_end = torch.cumsum(padded, 0)
+    pad_start = pad_end - padded
+    cnt_start = torch.cumsum(counts, 0) - counts
+    se_c = sorted_e.clamp(max=E_LOCAL - 1)
+    ar = torch.arange(NA, device=device)
+    pos = pad_start[se_c] + ar - cnt_start[se_c]
+    pos = torch.where(sorted_e < E_LOCAL, pos, torch.full_like(pos, max_padded))
+
+    sorted_tok = torch.full((max_padded + 1,), T, dtype=torch.int32, device=device)
+    sorted_tok[pos] = (order // TOP_K).to(torch.int32)
+    sorted_tok[max_padded] = T
+    sorted_w = torch.zeros((max_padded + 1,), dtype=torch.float32, device=device)
+    sorted_w[pos] = w_sel.reshape(-1)[order]
+
+    tile_starts = torch.arange(max_tiles, device=device, dtype=pad_end.dtype) * BM
+    tile_expert = torch.searchsorted(pad_end.contiguous(), tile_starts, right=True).to(torch.int32)
+
+    BN1 = 64
+    C = torch.empty((max_padded, I), dtype=torch.float16, device=device)
+    Cs = torch.empty((I // BN1, max_padded), dtype=torch.float32, device=device)
+    grid1 = (max_tiles * (I // BN1),)
+    hs_scale = hidden_states_scale.contiguous()
+
+    def launch1(fp8):
+        _gemm1_swiglu_kernel[grid1](
+            hidden_states, hs_scale, gemm1_weights, gemm1_weights_scale,
+            sorted_tok, tile_expert, C, Cs,
+            T, max_tiles, max_padded,
+            H=H, I=I, BM=BM, BN=BN1, FP8_DOT=fp8, GROUP_M=GROUP_M,
+        )
+
+    if _FP8_OK[0]:
+        try:
+            launch1(True)
+        except Exception:
+            _FP8_OK[0] = False
+            launch1(False)
+    else:
+        launch1(False)
+
+    out = torch.zeros((T, H), dtype=torch.float32, device=device)
+    grid2 = lambda META: (max_tiles * (H // META['BN']),)
+    _gemm2_kernel[grid2](
+        C, Cs, gemm2_weights, gemm2_weights_scale,
+        sorted_tok, sorted_w, tile_expert, out,
+        T, max_tiles, max_padded,
+        H=H, I=I, BN1=BN1, BM=BM, GROUP_M=GROUP_M,
+    )
+    return out.to(torch.bfloat16)
+```
+
+This attempt only widens the autotune search; the overall algorithm is the same as before. The target is the large-T workloads (5e8dc11c and 58a34f27), which dominate total latency.
+
+- **GEMM1:** I added more pipeline-depth and warp configs.
+- **GEMM2:** I added BK=128 configs. Each 128-wide K step is split into two 64-wide halves, so each half still applies its own per-64-column C scale. The precision handling should therefore be unchanged.
+
+The BK≤64 path is identical to the previous correct kernel. The autotuner can always fall back to the old configs, which should keep the 19.7x baseline.

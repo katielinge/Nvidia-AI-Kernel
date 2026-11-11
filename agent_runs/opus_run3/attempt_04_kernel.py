@@ -1,0 +1,229 @@
+import torch
+import triton
+import triton.language as tl
+
+H_DIM = 7168
+I_DIM = 2048
+E_LOCAL = 32
+_FP8_OK = [True]
+
+
+@triton.jit
+def _gemm1_swiglu_kernel(
+    hs_ptr, hs_scale_ptr, w1_ptr, w1s_ptr,
+    sorted_tok_ptr, tile_expert_ptr, c_ptr,
+    T, num_m_tiles,
+    H: tl.constexpr, I: tl.constexpr,
+    BM: tl.constexpr, BN: tl.constexpr, BK: tl.constexpr,
+    FP8_DOT: tl.constexpr,
+):
+    pid = tl.program_id(0)
+    pid_m = pid % num_m_tiles
+    pid_n = pid // num_m_tiles
+    expert = tl.load(tile_expert_ptr + pid_m)
+    if expert >= 32:
+        return
+    rows = pid_m * BM + tl.arange(0, BM)
+    tok = tl.load(sorted_tok_ptr + rows)
+    mask_m = tok < T
+    tok_safe = tl.where(mask_m, tok, 0)
+
+    n0 = pid_n * BN
+    offs_n = n0 + tl.arange(0, BN)
+    offs_k = tl.arange(0, BK)
+
+    a_ptrs = hs_ptr + tok_safe[:, None] * H + offs_k[None, :]
+    w_base = w1_ptr + expert.to(tl.int64) * (2 * I * H)
+    w1_ptrs = w_base + offs_n[:, None] * H + offs_k[None, :]
+    w2_ptrs = w_base + (offs_n + I)[:, None] * H + offs_k[None, :]
+    s_base = w1s_ptr + expert * ((2 * I // 128) * (H // 128))
+    s1_ptr = s_base + (n0 // 128) * (H // 128)
+    s2_ptr = s_base + ((n0 + I) // 128) * (H // 128)
+
+    acc1 = tl.zeros((BM, BN), dtype=tl.float32)
+    acc2 = tl.zeros((BM, BN), dtype=tl.float32)
+    for kb in range(0, H // BK):
+        a_s = tl.load(hs_scale_ptr + kb * T + tok_safe, mask=mask_m, other=0.0)
+        ws1 = tl.load(s1_ptr + kb)
+        ws2 = tl.load(s2_ptr + kb)
+        if FP8_DOT:
+            a = tl.load(a_ptrs)
+            b1 = tl.load(w1_ptrs)
+            b2 = tl.load(w2_ptrs)
+        else:
+            a = tl.load(a_ptrs).to(tl.bfloat16)
+            b1 = tl.load(w1_ptrs).to(tl.bfloat16)
+            b2 = tl.load(w2_ptrs).to(tl.bfloat16)
+        d1 = tl.dot(a, tl.trans(b1))
+        d2 = tl.dot(a, tl.trans(b2))
+        acc1 += d1 * (a_s[:, None] * ws1)
+        acc2 += d2 * (a_s[:, None] * ws2)
+        a_ptrs += BK
+        w1_ptrs += BK
+        w2_ptrs += BK
+
+    c = acc1 * (acc2 / (1.0 + tl.exp(-acc2)))
+    c_ptrs = c_ptr + rows[:, None] * I + offs_n[None, :]
+    tl.store(c_ptrs, c, mask=mask_m[:, None])
+
+
+@triton.jit
+def _gemm2_kernel(
+    c_ptr, w2_ptr, w2s_ptr,
+    sorted_tok_ptr, sorted_w_ptr, tile_expert_ptr, out_ptr,
+    T, num_m_tiles,
+    H: tl.constexpr, I: tl.constexpr,
+    BM: tl.constexpr, BN: tl.constexpr, BK: tl.constexpr,
+):
+    pid = tl.program_id(0)
+    pid_m = pid % num_m_tiles
+    pid_n = pid // num_m_tiles
+    expert = tl.load(tile_expert_ptr + pid_m)
+    if expert >= 32:
+        return
+    rows = pid_m * BM + tl.arange(0, BM)
+    tok = tl.load(sorted_tok_ptr + rows)
+    mask_m = tok < T
+    tok_safe = tl.where(mask_m, tok, 0)
+
+    n0 = pid_n * BN
+    offs_n = n0 + tl.arange(0, BN)
+    offs_k = tl.arange(0, BK)
+
+    a_ptrs = c_ptr + rows[:, None] * I + offs_k[None, :]
+    w_ptrs = w2_ptr + expert.to(tl.int64) * (H * I) + offs_n[:, None] * I + offs_k[None, :]
+    s_ptr = w2s_ptr + expert * ((H // 128) * (I // 128)) + (n0 // 128) * (I // 128)
+
+    acc = tl.zeros((BM, BN), dtype=tl.float32)
+    for kb in range(0, I // BK):
+        a = tl.load(a_ptrs, mask=mask_m[:, None], other=0.0)
+        a_hi = a.to(tl.bfloat16)
+        a_lo = (a - a_hi.to(tl.float32)).to(tl.bfloat16)
+        b = tl.trans(tl.load(w_ptrs).to(tl.bfloat16))
+        ws = tl.load(s_ptr + (kb * BK) // 128)
+        d = tl.dot(a_hi, b)
+        d = tl.dot(a_lo, b, d)
+        acc += d * ws
+        a_ptrs += BK
+        w_ptrs += BK
+
+    wt = tl.load(sorted_w_ptr + rows, mask=mask_m, other=0.0)
+    acc = acc * wt[:, None]
+    o_ptrs = out_ptr + tok_safe[:, None] * H + offs_n[None, :]
+    tl.atomic_add(o_ptrs, acc, mask=mask_m[:, None])
+
+
+@torch.no_grad()
+def kernel(
+    routing_logits: torch.Tensor,
+    routing_bias: torch.Tensor,
+    hidden_states: torch.Tensor,
+    hidden_states_scale: torch.Tensor,
+    gemm1_weights: torch.Tensor,
+    gemm1_weights_scale: torch.Tensor,
+    gemm2_weights: torch.Tensor,
+    gemm2_weights_scale: torch.Tensor,
+    local_expert_offset: int,
+    routed_scaling_factor: float,
+):
+    H = H_DIM
+    I = I_DIM
+    T = routing_logits.shape[0]
+    E_global = routing_logits.shape[1]
+    TOP_K, N_GROUP, TOPK_GROUP = 8, 8, 4
+    device = hidden_states.device
+
+    logits = routing_logits.to(torch.float32)
+    bias = routing_bias.to(torch.float32).reshape(-1)
+    s = 1.0 / (1.0 + torch.exp(-logits))
+    s_with_bias = s + bias
+    group_size = E_global // N_GROUP
+    s_wb_grouped = s_with_bias.view(T, N_GROUP, group_size)
+    top2_vals, _ = torch.topk(s_wb_grouped, k=2, dim=2, largest=True, sorted=False)
+    group_scores = top2_vals.sum(dim=2)
+    _, group_idx = torch.topk(group_scores, k=TOPK_GROUP, dim=1, largest=True, sorted=False)
+    group_mask = torch.zeros_like(group_scores)
+    group_mask.scatter_(1, group_idx, 1.0)
+    score_mask = group_mask.unsqueeze(2).expand(T, N_GROUP, group_size).reshape(T, E_global)
+    neg_inf = torch.finfo(torch.float32).min
+    scores_pruned = s_with_bias.masked_fill(score_mask == 0, neg_inf)
+    _, topk_idx = torch.topk(scores_pruned, k=TOP_K, dim=1, largest=True, sorted=False)
+    w_sel = s.gather(1, topk_idx)
+    w_sel = (w_sel / (w_sel.sum(dim=1, keepdim=True) + 1e-20)) * routed_scaling_factor
+
+    if T <= 512:
+        BM = 16
+    elif T <= 1024:
+        BM = 32
+    elif T <= 2048:
+        BM = 64
+    else:
+        BM = 128
+    NA = T * TOP_K
+    max_tiles = min(triton.cdiv(NA, BM) + E_LOCAL, E_LOCAL * triton.cdiv(T, BM))
+    max_padded = max_tiles * BM
+
+    flat_e = (topk_idx - int(local_expert_offset)).reshape(-1)
+    valid = (flat_e >= 0) & (flat_e < E_LOCAL)
+    flat_e = torch.where(valid, flat_e, torch.full_like(flat_e, E_LOCAL))
+    order = torch.argsort(flat_e, stable=True)
+    sorted_e = flat_e[order]
+    counts = torch.bincount(flat_e, minlength=E_LOCAL + 1)[:E_LOCAL]
+    padded = (counts + BM - 1) // BM * BM
+    pad_end = torch.cumsum(padded, 0)
+    pad_start = pad_end - padded
+    cnt_start = torch.cumsum(counts, 0) - counts
+    se_c = sorted_e.clamp(max=E_LOCAL - 1)
+    ar = torch.arange(NA, device=device)
+    pos = pad_start[se_c] + ar - cnt_start[se_c]
+    pos = torch.where(sorted_e < E_LOCAL, pos, torch.full_like(pos, max_padded))
+
+    sorted_tok = torch.full((max_padded + 1,), T, dtype=torch.int32, device=device)
+    sorted_tok[pos] = (order // TOP_K).to(torch.int32)
+    sorted_tok[max_padded] = T
+    sorted_w = torch.zeros((max_padded + 1,), dtype=torch.float32, device=device)
+    sorted_w[pos] = w_sel.reshape(-1)[order]
+
+    tile_starts = torch.arange(max_tiles, device=device, dtype=pad_end.dtype) * BM
+    tile_expert = torch.searchsorted(pad_end.contiguous(), tile_starts, right=True).to(torch.int32)
+
+    C = torch.empty((max_padded, I), dtype=torch.float32, device=device)
+    BN1 = 64
+    nw = 4 if BM <= 32 else 8
+    st1 = 3 if BM <= 64 else 2
+    grid1 = (max_tiles * (I // BN1),)
+    hs_scale = hidden_states_scale.contiguous()
+
+    def launch1(fp8):
+        _gemm1_swiglu_kernel[grid1](
+            hidden_states, hs_scale, gemm1_weights, gemm1_weights_scale,
+            sorted_tok, tile_expert, C,
+            T, max_tiles,
+            H=H, I=I, BM=BM, BN=BN1, BK=128, FP8_DOT=fp8,
+            num_warps=nw, num_stages=st1,
+        )
+
+    if _FP8_OK[0]:
+        try:
+            launch1(True)
+        except Exception:
+            _FP8_OK[0] = False
+            launch1(False)
+    else:
+        launch1(False)
+
+    out = torch.zeros((T, H), dtype=torch.float32, device=device)
+    BN2 = 128 if BM <= 64 else 64
+    if BM >= 64:
+        BK2, st2 = 64, 2
+    else:
+        BK2, st2 = 128, 3
+    grid2 = (max_tiles * (H // BN2),)
+    _gemm2_kernel[grid2](
+        C, gemm2_weights, gemm2_weights_scale,
+        sorted_tok, sorted_w, tile_expert, out,
+        T, max_tiles,
+        H=H, I=I, BM=BM, BN=BN2, BK=BK2,
+        num_warps=nw, num_stages=st2,
+    )
+    return out.to(torch.bfloat16)

@@ -1,0 +1,263 @@
+import torch
+import triton
+import triton.language as tl
+
+H_DIM = 7168
+I_DIM = 2048
+E_LOCAL = 32
+TOP_K = 8
+CBLK = 64  # column block of C for per-row fp16 scaling (== BN1 == BK2)
+GROUP_M = 8
+
+
+@triton.jit
+def _route_kernel(s_ptr, bias_ptr, pair_e_ptr, pair_pos_ptr, pair_w_ptr, counts_ptr,
+                  offset, scale):
+    t = tl.program_id(0)
+    g = tl.arange(0, 8)
+    j = tl.arange(0, 32)
+    flat = g[:, None] * 32 + j[None, :]
+    s = tl.load(s_ptr + t.to(tl.int64) * 256 + flat)
+    x = s + tl.load(bias_ptr + flat)
+    NEG = float("-inf")
+    m1 = tl.max(x, 1)
+    i1 = tl.min(tl.where(x == m1[:, None], j[None, :], 32), 1)
+    m2 = tl.max(tl.where(j[None, :] == i1[:, None], NEG, x), 1)
+    gs = m1 + m2
+    sel = tl.zeros((8,), dtype=tl.int32)
+    for _ in tl.static_range(4):
+        mx = tl.max(gs, 0)
+        gi = tl.min(tl.where(gs == mx, g, 8), 0)
+        hit = g == gi
+        sel = tl.where(hit, 1, sel)
+        gs = tl.where(hit, NEG, gs)
+    xm = tl.where(sel[:, None] > 0, x, NEG)
+    kk = tl.arange(0, 8)
+    te = tl.zeros((8,), dtype=tl.int32)
+    tw = tl.zeros((8,), dtype=tl.float32)
+    for k in tl.static_range(8):
+        mx = tl.max(tl.max(xm, 1), 0)
+        idx = tl.min(tl.min(tl.where(xm == mx, flat, 256), 1), 0)
+        hit = flat == idx
+        sv = tl.sum(tl.sum(tl.where(hit, s, 0.0), 1), 0)
+        te = tl.where(kk == k, idx, te)
+        tw = tl.where(kk == k, sv, tw)
+        xm = tl.where(hit, NEG, xm)
+    tw = tw / (tl.sum(tw, 0) + 1e-20) * scale
+    local = te - offset
+    v = (local >= 0) & (local < 32)
+    lc = tl.where(v, local, 0)
+    pos = tl.atomic_add(counts_ptr + lc, 1, mask=v)
+    base = t * 8 + kk
+    tl.store(pair_e_ptr + base, tl.where(v, local, 32))
+    tl.store(pair_pos_ptr + base, tl.where(v, pos, 0))
+    tl.store(pair_w_ptr + base, tw)
+
+
+@triton.jit
+def _scatter_kernel(pair_e_ptr, pair_pos_ptr, pair_w_ptr, counts_ptr,
+                    sorted_tok_ptr, sorted_w_ptr, tile_expert_ptr, N, num_tiles,
+                    BM: tl.constexpr, BP: tl.constexpr):
+    pid = tl.program_id(0)
+    ex = tl.arange(0, 32)
+    c = tl.load(counts_ptr + ex)
+    padded = (c + BM - 1) // BM * BM
+    cum = tl.cumsum(padded, 0)
+    start = cum - padded
+    p = pid * BP + tl.arange(0, BP)
+    pm = p < N
+    e = tl.load(pair_e_ptr + p, mask=pm, other=32)
+    pos = tl.load(pair_pos_ptr + p, mask=pm, other=0)
+    w = tl.load(pair_w_ptr + p, mask=pm, other=0.0)
+    st = tl.sum(tl.where(e[:, None] == ex[None, :], start[None, :], 0), 1)
+    v = pm & (e < 32)
+    dest = st + pos
+    tl.store(sorted_tok_ptr + dest, (p // 8).to(tl.int32), mask=v)
+    tl.store(sorted_w_ptr + dest, w, mask=v)
+    ti = pid * BP + tl.arange(0, BP)
+    tm = ti < num_tiles
+    tex = tl.sum((cum[None, :] <= (ti * BM)[:, None]).to(tl.int32), 1)
+    tl.store(tile_expert_ptr + ti, tex, mask=tm)
+
+
+@triton.jit
+def _swizzle(pid, num_m, num_n, GM: tl.constexpr):
+    width = GM * num_n
+    group = pid // width
+    first_m = group * GM
+    gsize = tl.minimum(num_m - first_m, GM)
+    r = pid % width
+    pid_m = first_m + r % gsize
+    pid_n = r // gsize
+    return pid_m, pid_n
+
+
+@triton.jit
+def _gemm1_swiglu_kernel(
+    hs_ptr, hs_scale_ptr, w13_ptr, s13_ptr,
+    sorted_tok_ptr, tile_expert_ptr, c_ptr, cs_ptr, T, num_m,
+    BM: tl.constexpr, BN: tl.constexpr, BK: tl.constexpr, GM: tl.constexpr,
+):
+    pid_m, pid_n = _swizzle(tl.program_id(0), num_m, 2048 // BN, GM)
+    e = tl.load(tile_expert_ptr + pid_m)
+    if e >= 32:
+        return
+    rows = pid_m * BM + tl.arange(0, BM)
+    tok = tl.load(sorted_tok_ptr + rows)
+    valid = tok >= 0
+    tok = tl.where(valid, tok, 0)
+
+    offs_n = pid_n * BN + tl.arange(0, BN)
+    offs_k = tl.arange(0, BK)
+
+    a_ptrs = hs_ptr + tok.to(tl.int64)[:, None] * 7168 + offs_k[None, :]
+    w_base = w13_ptr + e.to(tl.int64) * (4096 * 7168)
+    b1_ptrs = w_base + offs_n.to(tl.int64)[None, :] * 7168 + offs_k[:, None]
+    b2_ptrs = b1_ptrs + 2048 * 7168
+    s_base = s13_ptr + e * (32 * 56)
+    nb = (pid_n * BN) // 128
+
+    acc1 = tl.zeros((BM, BN), dtype=tl.float32)
+    acc2 = tl.zeros((BM, BN), dtype=tl.float32)
+    for k0 in range(0, 7168, BK):
+        a = tl.load(a_ptrs)
+        b1 = tl.load(b1_ptrs)
+        b2 = tl.load(b2_ptrs)
+        kb = k0 // 128
+        asc = tl.load(hs_scale_ptr + kb * T + tok)
+        ws1 = tl.load(s_base + nb * 56 + kb)
+        ws2 = tl.load(s_base + (16 + nb) * 56 + kb)
+        acc1 += tl.dot(a, b1) * (asc[:, None] * ws1)
+        acc2 += tl.dot(a, b2) * (asc[:, None] * ws2)
+        a_ptrs += BK
+        b1_ptrs += BK
+        b2_ptrs += BK
+
+    c = acc2 / (1.0 + tl.exp(-acc2)) * acc1
+    amax = tl.max(tl.abs(c), axis=1)
+    s = tl.maximum(amax, 1e-30) * (1.0 / 32768.0)
+    c16 = (c / s[:, None]).to(tl.float16)
+    c_ptrs = c_ptr + rows.to(tl.int64)[:, None] * 2048 + offs_n[None, :]
+    tl.store(c_ptrs, c16)
+    tl.store(cs_ptr + rows.to(tl.int64) * (2048 // BN) + pid_n, s)
+
+
+@triton.jit
+def _gemm2_kernel(
+    c_ptr, cs_ptr, w2_ptr, s2_ptr, sorted_tok_ptr, sorted_w_ptr, tile_expert_ptr, out_ptr,
+    num_m,
+    BM: tl.constexpr, BN: tl.constexpr, BK: tl.constexpr, GM: tl.constexpr,
+):
+    pid_m, pid_n = _swizzle(tl.program_id(0), num_m, 7168 // BN, GM)
+    e = tl.load(tile_expert_ptr + pid_m)
+    if e >= 32:
+        return
+    rows = pid_m * BM + tl.arange(0, BM)
+    tok = tl.load(sorted_tok_ptr + rows)
+    valid = tok >= 0
+    tok = tl.where(valid, tok, 0)
+    wt = tl.load(sorted_w_ptr + rows)
+
+    offs_n = pid_n * BN + tl.arange(0, BN)
+    offs_k = tl.arange(0, BK)
+    c_ptrs = c_ptr + rows.to(tl.int64)[:, None] * 2048 + offs_k[None, :]
+    cs_ptrs = cs_ptr + rows.to(tl.int64) * (2048 // BK)
+    b_ptrs = (w2_ptr + e.to(tl.int64) * (7168 * 2048)
+              + offs_n.to(tl.int64)[None, :] * 2048 + offs_k[:, None])
+    s_base = s2_ptr + e * (56 * 16) + ((pid_n * BN) // 128) * 16
+
+    acc = tl.zeros((BM, BN), dtype=tl.float32)
+    for k0 in range(0, 2048, BK):
+        c = tl.load(c_ptrs)
+        cs = tl.load(cs_ptrs)
+        b = tl.load(b_ptrs).to(tl.float16)
+        ws = tl.load(s_base + k0 // 128)
+        acc += tl.dot(c, b) * (cs[:, None] * ws)
+        c_ptrs += BK
+        cs_ptrs += 1
+        b_ptrs += BK
+
+    acc = acc * wt[:, None]
+    o_ptrs = out_ptr + tok.to(tl.int64)[:, None] * 7168 + offs_n[None, :]
+    tl.atomic_add(o_ptrs, acc, mask=valid[:, None])
+
+
+@torch.no_grad()
+def kernel(
+    routing_logits, routing_bias, hidden_states, hidden_states_scale,
+    gemm1_weights, gemm1_weights_scale, gemm2_weights, gemm2_weights_scale,
+    local_expert_offset, routed_scaling_factor,
+):
+    device = hidden_states.device
+    T = routing_logits.shape[0]
+
+    if T <= 64:
+        BM = 16
+    elif T <= 512:
+        BM = 32
+    elif T <= 2048:
+        BM = 64
+    else:
+        BM = 128
+
+    N = T * TOP_K
+    s = torch.sigmoid(routing_logits.to(torch.float32)).contiguous()
+    bias = routing_bias.to(torch.float32).reshape(-1).contiguous()
+    counts = torch.zeros((E_LOCAL,), dtype=torch.int32, device=device)
+    pair_e = torch.empty((N,), dtype=torch.int32, device=device)
+    pair_pos = torch.empty((N,), dtype=torch.int32, device=device)
+    pair_w = torch.empty((N,), dtype=torch.float32, device=device)
+    _route_kernel[(T,)](
+        s, bias, pair_e, pair_pos, pair_w, counts,
+        int(local_expert_offset), float(routed_scaling_factor), num_warps=2,
+    )
+
+    if T > 256:
+        total = int(((counts + BM - 1) // BM * BM).sum().item())
+        num_tiles = max(total // BM, 1)
+    else:
+        num_tiles = (N + E_LOCAL * BM) // BM
+    R = num_tiles * BM
+
+    sorted_tok = torch.full((R,), -1, dtype=torch.int32, device=device)
+    sorted_w = torch.empty((R,), dtype=torch.float32, device=device)
+    tile_expert = torch.empty((num_tiles,), dtype=torch.int32, device=device)
+    BP = 128
+    gs = max(triton.cdiv(N, BP), triton.cdiv(num_tiles, BP))
+    _scatter_kernel[(gs,)](
+        pair_e, pair_pos, pair_w, counts, sorted_tok, sorted_w, tile_expert,
+        N, num_tiles, BM=BM, BP=BP, num_warps=4,
+    )
+
+    C = torch.empty((R, I_DIM), dtype=torch.float16, device=device)
+    CS = torch.empty((R, I_DIM // CBLK), dtype=torch.float32, device=device)
+    out = torch.zeros((T, H_DIM), dtype=torch.float32, device=device)
+
+    hs = hidden_states.contiguous()
+    hs_scale = hidden_states_scale.to(torch.float32).contiguous()
+    w13 = gemm1_weights.contiguous()
+    s13 = gemm1_weights_scale.to(torch.float32).contiguous()
+    w2 = gemm2_weights.contiguous()
+    s2 = gemm2_weights_scale.to(torch.float32).contiguous()
+
+    if BM == 128:
+        k1 = dict(BN=CBLK, BK=128, num_warps=8, num_stages=2)
+        k2 = dict(BN=128, BK=CBLK, num_warps=8, num_stages=3)
+    else:
+        k1 = dict(BN=CBLK, BK=128, num_warps=4, num_stages=3)
+        k2 = dict(BN=128, BK=CBLK, num_warps=4, num_stages=3)
+
+    grid1 = (num_tiles * (I_DIM // k1["BN"]),)
+    _gemm1_swiglu_kernel[grid1](
+        hs, hs_scale, w13, s13,
+        sorted_tok, tile_expert, C, CS, T, num_tiles,
+        BM=BM, BN=k1["BN"], BK=k1["BK"], GM=GROUP_M,
+        num_warps=k1["num_warps"], num_stages=k1["num_stages"],
+    )
+    grid2 = (num_tiles * (H_DIM // k2["BN"]),)
+    _gemm2_kernel[grid2](
+        C, CS, w2, s2, sorted_tok, sorted_w, tile_expert, out, num_tiles,
+        BM=BM, BN=k2["BN"], BK=k2["BK"], GM=GROUP_M,
+        num_warps=k2["num_warps"], num_stages=k2["num_stages"],
+    )
+    return out.to(torch.bfloat16)

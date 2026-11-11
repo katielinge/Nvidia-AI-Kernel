@@ -1,0 +1,113 @@
+import torch
+
+
+@torch.no_grad()
+def kernel(
+    routing_logits: torch.Tensor,
+    routing_bias: torch.Tensor,
+    hidden_states: torch.Tensor,
+    hidden_states_scale: torch.Tensor,
+    gemm1_weights: torch.Tensor,
+    gemm1_weights_scale: torch.Tensor,
+    gemm2_weights: torch.Tensor,
+    gemm2_weights_scale: torch.Tensor,
+    local_expert_offset: int,
+    routed_scaling_factor: float,
+):
+    H = 7168
+    I = 2048
+    E_local = gemm1_weights.shape[0]
+    BLOCK = 128
+    E_global = routing_logits.shape[1]
+    T = routing_logits.shape[0]
+
+    TOP_K = 8
+    N_GROUP = 8
+    TOPK_GROUP = 4
+
+    nH = H // BLOCK          # 56
+    nI = I // BLOCK          # 16
+    nG1 = (2 * I) // BLOCK   # 32
+
+    device = hidden_states.device
+    bf16 = torch.bfloat16
+
+    # 1) Activation dequant to bf16: A[t, h] = fp8[t, h] * scale[h // 128, t]
+    A = hidden_states.to(torch.float32).view(T, nH, BLOCK)
+    A_scale = hidden_states_scale.to(torch.float32).permute(1, 0).unsqueeze(-1)  # [T, nH, 1]
+    A = (A * A_scale).reshape(T, H).to(bf16)
+    del A_scale
+
+    # 2) No-aux routing (fp32, identical math to reference)
+    logits = routing_logits.to(torch.float32)
+    bias = routing_bias.to(torch.float32).reshape(-1)
+
+    s = 1.0 / (1.0 + torch.exp(-logits))
+    s_with_bias = s + bias
+
+    group_size = E_global // N_GROUP
+    s_wb_grouped = s_with_bias.view(T, N_GROUP, group_size)
+
+    top2_vals, _ = torch.topk(s_wb_grouped, k=2, dim=2, largest=True, sorted=False)
+    group_scores = top2_vals.sum(dim=2)
+
+    _, group_idx = torch.topk(group_scores, k=TOPK_GROUP, dim=1, largest=True, sorted=False)
+    group_mask = torch.zeros_like(group_scores)
+    group_mask.scatter_(1, group_idx, 1.0)
+    score_mask = group_mask.unsqueeze(2).expand(T, N_GROUP, group_size).reshape(T, E_global)
+
+    neg_inf = torch.finfo(torch.float32).min
+    scores_pruned = s_with_bias.masked_fill(score_mask == 0, neg_inf)
+    _, topk_idx = torch.topk(scores_pruned, k=TOP_K, dim=1, largest=True, sorted=False)
+
+    M = torch.zeros_like(s)
+    M.scatter_(1, topk_idx, 1.0)
+    weights = s * M
+    weights_sum = weights.sum(dim=1, keepdim=True) + 1e-20
+    weights = (weights / weights_sum) * routed_scaling_factor
+
+    # 3) Local expert compute: weights dequantized per expert in bf16 (half the
+    #    memory traffic of fp32, and bf16 tensor-core matmuls with fp32 accumulate)
+    output = torch.zeros((T, H), dtype=torch.float32, device=device)
+    local_start = int(local_expert_offset)
+
+    for le in range(E_local):
+        ge = local_start + le
+        if ge < 0 or ge >= E_global:
+            continue
+
+        sel_mask_per_token = (topk_idx == ge).any(dim=1)
+        if not sel_mask_per_token.any():
+            continue
+
+        token_idx = torch.nonzero(sel_mask_per_token, as_tuple=False).squeeze(1)
+
+        # W13: [4096, 7168], scale [32, 56]
+        W13 = (
+            gemm1_weights[le].to(bf16).view(nG1, BLOCK, nH, BLOCK)
+            * gemm1_weights_scale[le].to(bf16).view(nG1, 1, nH, 1)
+        ).view(2 * I, H)
+
+        # W2: [7168, 2048], scale [56, 16]
+        W2 = (
+            gemm2_weights[le].to(bf16).view(nH, BLOCK, nI, BLOCK)
+            * gemm2_weights_scale[le].to(bf16).view(nH, 1, nI, 1)
+        ).view(H, I)
+
+        A_e = A.index_select(0, token_idx)
+
+        G1 = A_e.matmul(W13.t())          # [Tk, 2I] bf16
+        del W13, A_e
+        X1 = G1[:, :I].float()
+        X2 = G1[:, I:].float()
+        C = ((X2 / (1.0 + torch.exp(-X2))) * X1).to(bf16)
+        del G1, X1, X2
+
+        O = C.matmul(W2.t()).float()      # [Tk, H]
+        del W2, C
+
+        w_tok = weights.index_select(0, token_idx)[:, ge]
+        output.index_add_(0, token_idx, O * w_tok.unsqueeze(1))
+        del O
+
+    return output.to(bf16)

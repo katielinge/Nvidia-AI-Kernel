@@ -1,0 +1,33 @@
+{
+  "tier": "haiku",
+  "model": "haiku",
+  "run_id": "2",
+  "fake": false,
+  "attempts_made": 15,
+  "stop_reason": "max_iterations",
+  "iterations_to_first_correct": 1,
+  "best_mean_speedup": 1.5657939356901873,
+  "best_attempt": 3,
+  "total_input_tokens": 72658,
+  "total_output_tokens": 43108,
+  "total_cost_usd": 0.03448659999999999,
+  "settings": {
+    "max_iterations": 15,
+    "max_output_tokens": 16000,
+    "temperature": null,
+    "gpu_name": "NVIDIA GeForce RTX 5060 Laptop GPU"
+  },
+  "bench_settings": {
+    "warmup_runs": 3,
+    "iterations": 20,
+    "num_trials": 3,
+    "ref_cache": "ref_latency.json",
+    "stop_on_fail": true
+  },
+  "model_ids_used": [
+    "claude-haiku-5-5"
+  ],
+  "total_llm_seconds": 169.7,
+  "total_bench_seconds": 1319.5,
+  "cost_note": "API-equivalent estimate from Claude Code; not billed (subscription)"
+}

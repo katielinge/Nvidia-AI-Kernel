@@ -1,0 +1,141 @@
+import torch
+import triton
+import triton.language as tl
+
+
+@triton.jit
+def _gemm1_kernel(A, ASC, W, WS, IDX, C, Tk, T,
+                  BM: tl.constexpr):
+    H: tl.constexpr = 7168
+    I: tl.constexpr = 2048
+    pid_m = tl.program_id(0)
+    pid_n = tl.program_id(1)
+    offs_m = pid_m * BM + tl.arange(0, BM)
+    mask_m = offs_m < Tk
+    tok = tl.load(IDX + offs_m, mask=mask_m, other=0).to(tl.int64)
+    offs_k = tl.arange(0, 128)
+    offs_n = pid_n * 128 + tl.arange(0, 128)
+    n1 = offs_n[:, None].to(tl.int64)
+    n2 = (offs_n[:, None] + I).to(tl.int64)
+    acc1 = tl.zeros((BM, 128), dtype=tl.float32)
+    acc2 = tl.zeros((BM, 128), dtype=tl.float32)
+    for kb in range(56):
+        a = tl.load(A + tok[:, None] * H + kb * 128 + offs_k[None, :],
+                    mask=mask_m[:, None], other=0.0)
+        asc = tl.load(ASC + kb * T + tok, mask=mask_m, other=0.0)
+        w1 = tl.load(W + n1 * H + kb * 128 + offs_k[None, :])
+        w2 = tl.load(W + n2 * H + kb * 128 + offs_k[None, :])
+        s1 = tl.load(WS + pid_n * 56 + kb)
+        s2 = tl.load(WS + (pid_n + 16) * 56 + kb)
+        d1 = tl.dot(a, tl.trans(w1))
+        d2 = tl.dot(a, tl.trans(w2))
+        acc1 += d1 * (asc[:, None] * s1)
+        acc2 += d2 * (asc[:, None] * s2)
+    c = acc2 * tl.sigmoid(acc2) * acc1
+    tl.store(C + offs_m[:, None].to(tl.int64) * I + offs_n[None, :], c,
+             mask=mask_m[:, None])
+
+
+@triton.jit
+def _gemm2_kernel(C, W, WS, IDX, WT, OUT, Tk,
+                  BM: tl.constexpr):
+    H: tl.constexpr = 7168
+    I: tl.constexpr = 2048
+    pid_m = tl.program_id(0)
+    pid_n = tl.program_id(1)
+    offs_m = pid_m * BM + tl.arange(0, BM)
+    mask_m = offs_m < Tk
+    tok = tl.load(IDX + offs_m, mask=mask_m, other=0).to(tl.int64)
+    wt = tl.load(WT + offs_m, mask=mask_m, other=0.0)
+    offs_k = tl.arange(0, 128)
+    offs_n = pid_n * 128 + tl.arange(0, 128)
+    nn = offs_n[:, None].to(tl.int64)
+    acc = tl.zeros((BM, 128), dtype=tl.float32)
+    for kb in range(16):
+        c = tl.load(C + offs_m[:, None].to(tl.int64) * I + kb * 128 + offs_k[None, :],
+                    mask=mask_m[:, None], other=0.0)
+        c_hi = c.to(tl.bfloat16)
+        c_lo = (c - c_hi.to(tl.float32)).to(tl.bfloat16)
+        w = tl.load(W + nn * I + kb * 128 + offs_k[None, :]).to(tl.bfloat16)
+        s = tl.load(WS + pid_n * 16 + kb)
+        wt_t = tl.trans(w)
+        d = tl.dot(c_hi, wt_t) + tl.dot(c_lo, wt_t)
+        acc += d * s
+    acc = acc * wt[:, None]
+    optr = OUT + tok[:, None] * H + offs_n[None, :]
+    old = tl.load(optr, mask=mask_m[:, None], other=0.0)
+    tl.store(optr, old + acc, mask=mask_m[:, None])
+
+
+@torch.no_grad()
+def kernel(
+    routing_logits, routing_bias, hidden_states, hidden_states_scale,
+    gemm1_weights, gemm1_weights_scale, gemm2_weights, gemm2_weights_scale,
+    local_expert_offset, routed_scaling_factor,
+):
+    H = 7168
+    I = 2048
+    E_local = 32
+    E_global = 256
+    T = routing_logits.shape[0]
+    device = hidden_states.device
+
+    logits = routing_logits.to(torch.float32)
+    bias = routing_bias.to(torch.float32).reshape(-1)
+    s = 1.0 / (1.0 + torch.exp(-logits))
+    swb = s + bias
+    grouped = swb.view(T, 8, 32)
+    top2, _ = torch.topk(grouped, k=2, dim=2, largest=True, sorted=False)
+    gscore = top2.sum(dim=2)
+    _, gidx = torch.topk(gscore, k=4, dim=1, largest=True, sorted=False)
+    gmask = torch.zeros_like(gscore)
+    gmask.scatter_(1, gidx, 1.0)
+    smask = gmask.unsqueeze(2).expand(T, 8, 32).reshape(T, E_global)
+    neg_inf = torch.finfo(torch.float32).min
+    pruned = swb.masked_fill(smask == 0, neg_inf)
+    _, topk_idx = torch.topk(pruned, k=8, dim=1, largest=True, sorted=False)
+    Mk = torch.zeros_like(s)
+    Mk.scatter_(1, topk_idx, 1.0)
+    w = s * Mk
+    w = (w / (w.sum(dim=1, keepdim=True) + 1e-20)) * float(routed_scaling_factor)
+
+    off = int(local_expert_offset)
+    loc = topk_idx - off
+    valid = (loc >= 0) & (loc < E_local)
+    tok_all = torch.arange(T, device=device).unsqueeze(1).expand(T, 8)
+    pw = torch.gather(w, 1, topk_idx)
+    tok_f = tok_all[valid]
+    loc_f = loc[valid]
+    pw_f = pw[valid]
+    order = torch.argsort(loc_f, stable=True)
+    tok_s = tok_f[order].to(torch.int32).contiguous()
+    pw_s = pw_f[order].to(torch.float32).contiguous()
+    counts = torch.bincount(loc_f, minlength=E_local).tolist()
+
+    out = torch.zeros((T, H), dtype=torch.float32, device=device)
+    asc = hidden_states_scale.to(torch.float32).contiguous()
+    ws1 = gemm1_weights_scale.to(torch.float32).contiguous()
+    ws2 = gemm2_weights_scale.to(torch.float32).contiguous()
+
+    maxc = max(counts) if counts else 0
+    if maxc == 0:
+        return out.to(torch.bfloat16)
+    Cbuf = torch.empty((maxc, I), dtype=torch.float32, device=device)
+
+    start = 0
+    for e in range(E_local):
+        Tk = counts[e]
+        if Tk == 0:
+            continue
+        idx = tok_s[start:start + Tk]
+        wt = pw_s[start:start + Tk]
+        start += Tk
+        BM = min(64, max(16, triton.next_power_of_2(Tk)))
+        nw = 8 if BM >= 64 else 4
+        grid_m = triton.cdiv(Tk, BM)
+        _gemm1_kernel[(grid_m, 16)](hidden_states, asc, gemm1_weights[e], ws1[e], idx, Cbuf,
+                                    Tk, T, BM=BM, num_warps=nw, num_stages=2)
+        _gemm2_kernel[(grid_m, 56)](Cbuf, gemm2_weights[e], ws2[e], idx, wt, out,
+                                    Tk, BM=BM, num_warps=nw, num_stages=2)
+
+    return out.to(torch.bfloat16)

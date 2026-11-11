@@ -1,0 +1,219 @@
+Reverted to the attempt-4 kernel (2D grid, no swizzle), since the swizzle in attempt 6 measured slightly slower. This round targets the two large-T workloads (62 ms and 43 ms), the weakest at about 7–8x. For those, `_gemm1_kernel` now uses BK=64 with 4 pipeline stages instead of BK=128 with 2.
+
+```python
+import torch
+import triton
+import triton.language as tl
+
+H_ = 7168
+I_ = 2048
+
+
+@triton.jit
+def _gemm1_kernel(hs_ptr, hss_ptr, w1_ptr, w1s_ptr, c_ptr, cs_ptr, sorted_tok_ptr,
+                  tile_e_ptr, tile_rs_ptr, tile_re_ptr, T, P,
+                  BM: tl.constexpr, BN: tl.constexpr, BK: tl.constexpr):
+    H: tl.constexpr = 7168
+    I: tl.constexpr = 2048
+    KPB: tl.constexpr = 128 // BK
+    pid_m = tl.program_id(0)
+    pid_n = tl.program_id(1)
+    rs = tl.load(tile_rs_ptr + pid_m)
+    re = tl.load(tile_re_ptr + pid_m)
+    if rs >= re:
+        return
+    e = tl.load(tile_e_ptr + pid_m).to(tl.int64)
+    rows = rs + tl.arange(0, BM)
+    rmask = rows < re
+    tok = tl.load(sorted_tok_ptr + rows, mask=rmask, other=0).to(tl.int64)
+    offs_n = pid_n * BN + tl.arange(0, BN)
+    offs_k = tl.arange(0, BK)
+    a_ptrs = hs_ptr + tok[:, None] * H + offs_k[None, :]
+    wbase = w1_ptr + e * (2 * I * H)
+    w1_ptrs = wbase + offs_n[:, None].to(tl.int64) * H + offs_k[None, :]
+    w3_ptrs = w1_ptrs + I * H
+    sbase = w1s_ptr + e * (32 * 56)
+    nb = (pid_n * BN) // 128
+    s1_ptr = sbase + nb * 56
+    s3_ptr = sbase + (nb + 16) * 56
+    as_ptrs = hss_ptr + tok
+    acc1 = tl.zeros((BM, BN), dtype=tl.float32)
+    acc3 = tl.zeros((BM, BN), dtype=tl.float32)
+    for kb in range(56 * KPB):
+        kq = kb // KPB
+        a = tl.load(a_ptrs)
+        w1 = tl.load(w1_ptrs)
+        w3 = tl.load(w3_ptrs)
+        a_s = tl.load(as_ptrs + kq * T)
+        s1 = tl.load(s1_ptr + kq)
+        s3 = tl.load(s3_ptr + kq)
+        d1 = tl.dot(a, tl.trans(w1))
+        d3 = tl.dot(a, tl.trans(w3))
+        acc1 += d1 * (a_s[:, None] * s1)
+        acc3 += d3 * (a_s[:, None] * s3)
+        a_ptrs += BK
+        w1_ptrs += BK
+        w3_ptrs += BK
+    c = acc3 / (1.0 + tl.exp(-acc3)) * acc1
+    amax = tl.max(tl.abs(c), axis=1)
+    amax = tl.maximum(amax, 1e-30)
+    cq = (c / amax[:, None]).to(tl.float16)
+    c_ptrs = c_ptr + rows[:, None].to(tl.int64) * I + offs_n[None, :]
+    tl.store(c_ptrs, cq, mask=rmask[:, None])
+    tl.store(cs_ptr + pid_n.to(tl.int64) * P + rows, amax, mask=rmask)
+
+
+@triton.jit
+def _gemm2_kernel(c_ptr, cs_ptr, w2_ptr, w2s_ptr, out_ptr, sorted_tok_ptr, sorted_w_ptr,
+                  tile_e_ptr, tile_rs_ptr, tile_re_ptr, P,
+                  BM: tl.constexpr, BN: tl.constexpr, BK: tl.constexpr):
+    H: tl.constexpr = 7168
+    I: tl.constexpr = 2048
+    KPB: tl.constexpr = 128 // BK
+    pid_m = tl.program_id(0)
+    pid_n = tl.program_id(1)
+    rs = tl.load(tile_rs_ptr + pid_m)
+    re = tl.load(tile_re_ptr + pid_m)
+    if rs >= re:
+        return
+    e = tl.load(tile_e_ptr + pid_m).to(tl.int64)
+    rows = rs + tl.arange(0, BM)
+    rmask = rows < re
+    tok = tl.load(sorted_tok_ptr + rows, mask=rmask, other=0).to(tl.int64)
+    offs_n = pid_n * BN + tl.arange(0, BN)
+    offs_k = tl.arange(0, BK)
+    a_ptrs = c_ptr + rows[:, None].to(tl.int64) * I + offs_k[None, :]
+    as_ptrs = cs_ptr + rows
+    w_ptrs = w2_ptr + e * (H * I) + offs_n[:, None].to(tl.int64) * I + offs_k[None, :]
+    s_ptr = w2s_ptr + e * (56 * 16) + ((pid_n * BN) // 128) * 16
+    acc = tl.zeros((BM, BN), dtype=tl.float32)
+    for kb in range(16 * KPB):
+        a = tl.load(a_ptrs, mask=rmask[:, None], other=0.0)
+        a_s = tl.load(as_ptrs + kb * P, mask=rmask, other=0.0)
+        w = tl.trans(tl.load(w_ptrs).to(tl.float16))
+        s = tl.load(s_ptr + kb // KPB)
+        d = tl.dot(a, w)
+        acc += d * (a_s[:, None] * s)
+        a_ptrs += BK
+        w_ptrs += BK
+    wt = tl.load(sorted_w_ptr + rows, mask=rmask, other=0.0)
+    acc = acc * wt[:, None]
+    o_ptrs = out_ptr + tok[:, None] * H + offs_n[None, :]
+    tl.atomic_add(o_ptrs, acc, mask=rmask[:, None])
+
+
+@torch.no_grad()
+def kernel(
+    routing_logits: torch.Tensor,
+    routing_bias: torch.Tensor,
+    hidden_states: torch.Tensor,
+    hidden_states_scale: torch.Tensor,
+    gemm1_weights: torch.Tensor,
+    gemm1_weights_scale: torch.Tensor,
+    gemm2_weights: torch.Tensor,
+    gemm2_weights_scale: torch.Tensor,
+    local_expert_offset: int,
+    routed_scaling_factor: float,
+):
+    H = 7168
+    I = 2048
+    E_global = 256
+    E_local = 32
+    TOP_K = 8
+    N_GROUP = 8
+    TOPK_GROUP = 4
+    T = routing_logits.shape[0]
+    device = hidden_states.device
+
+    logits = routing_logits.to(torch.float32)
+    bias = routing_bias.to(torch.float32).reshape(-1)
+    s = 1.0 / (1.0 + torch.exp(-logits))
+    s_with_bias = s + bias
+    group_size = E_global // N_GROUP
+    s_wb_grouped = s_with_bias.view(T, N_GROUP, group_size)
+    top2_vals, _ = torch.topk(s_wb_grouped, k=2, dim=2, largest=True, sorted=False)
+    group_scores = top2_vals.sum(dim=2)
+    _, group_idx = torch.topk(group_scores, k=TOPK_GROUP, dim=1, largest=True, sorted=False)
+    group_mask = torch.zeros_like(group_scores)
+    group_mask.scatter_(1, group_idx, 1.0)
+    score_mask = group_mask.unsqueeze(2).expand(T, N_GROUP, group_size).reshape(T, E_global)
+    neg_inf = torch.finfo(torch.float32).min
+    scores_pruned = s_with_bias.masked_fill(score_mask == 0, neg_inf)
+    _, topk_idx = torch.topk(scores_pruned, k=TOP_K, dim=1, largest=True, sorted=False)
+    M = torch.zeros_like(s)
+    M.scatter_(1, topk_idx, 1.0)
+    weights = s * M
+    weights_sum = weights.sum(dim=1, keepdim=True) + 1e-20
+    weights = (weights / weights_sum) * routed_scaling_factor
+    topk_w = weights.gather(1, topk_idx)
+
+    local = topk_idx - int(local_expert_offset)
+    is_local = (local >= 0) & (local < E_local)
+    eid = torch.where(is_local, local, torch.full_like(local, E_local)).reshape(-1)
+    order = torch.argsort(eid, stable=True)
+    sorted_tok = (order // TOP_K).to(torch.int32).contiguous()
+    sorted_w = topk_w.reshape(-1)[order].to(torch.float32).contiguous()
+    counts = torch.zeros(E_local + 1, dtype=torch.int64, device=device)
+    counts.scatter_add_(0, eid, torch.ones_like(eid))
+    counts = counts[:E_local]
+
+    big = False
+    if T <= 512:
+        BM = 16
+    elif T <= 2048:
+        BM = 32
+    elif T <= 4096:
+        BM = 64
+    else:
+        BM = 128
+        big = True
+
+    tiles_e = (counts + BM - 1) // BM
+    tile_cum = torch.cumsum(tiles_e, 0)
+    tile_start = tile_cum - tiles_e
+    pair_start = torch.cumsum(counts, 0) - counts
+    P = T * TOP_K
+    max_tiles = (P + BM - 1) // BM + E_local
+    t_ids = torch.arange(max_tiles, device=device, dtype=torch.int64)
+    te = torch.searchsorted(tile_cum, t_ids, right=True)
+    valid = te < E_local
+    te_c = te.clamp(max=E_local - 1)
+    rs = pair_start[te_c] + (t_ids - tile_start[te_c]) * BM
+    re = pair_start[te_c] + counts[te_c]
+    rs = torch.where(valid, rs, torch.zeros_like(rs)).to(torch.int32).contiguous()
+    re = torch.where(valid, re, torch.zeros_like(re)).to(torch.int32).contiguous()
+    te_i = te_c.to(torch.int32).contiguous()
+
+    hs = hidden_states.contiguous()
+    hss = hidden_states_scale.to(torch.float32).contiguous()
+    w1 = gemm1_weights.contiguous()
+    w1s = gemm1_weights_scale.to(torch.float32).contiguous()
+    w2 = gemm2_weights.contiguous()
+    w2s = gemm2_weights_scale.to(torch.float32).contiguous()
+
+    BN1 = 64
+    C = torch.empty((P, I), dtype=torch.float16, device=device)
+    Cs = torch.empty((I // BN1, P), dtype=torch.float32, device=device)
+    out = torch.zeros((T, H), dtype=torch.float32, device=device)
+
+    if big:
+        _gemm1_kernel[(max_tiles, I // BN1)](
+            hs, hss, w1, w1s, C, Cs, sorted_tok, te_i, rs, re, T, P,
+            BM=BM, BN=BN1, BK=64, num_warps=8, num_stages=4)
+        BN2 = 128
+        _gemm2_kernel[(max_tiles, H // BN2)](
+            C, Cs, w2, w2s, out, sorted_tok, sorted_w, te_i, rs, re, P,
+            BM=BM, BN=BN2, BK=64, num_warps=8, num_stages=3)
+    else:
+        _gemm1_kernel[(max_tiles, I // BN1)](
+            hs, hss, w1, w1s, C, Cs, sorted_tok, te_i, rs, re, T, P,
+            BM=BM, BN=BN1, BK=128, num_warps=4, num_stages=3)
+        BN2 = 64
+        _gemm2_kernel[(max_tiles, H // BN2)](
+            C, Cs, w2, w2s, out, sorted_tok, sorted_w, te_i, rs, re, P,
+            BM=BM, BN=BN2, BK=64, num_warps=4, num_stages=3)
+
+    return out.to(torch.bfloat16)
+```
+
+The aim is deeper software pipelining that hides memory latency better within the roughly 99 KB shared-memory limit: each stage is 16 KB, so four stages take about 64 KB, where the old setup used about 64 KB for two. `_gemm1_kernel` now takes the K block size as a parameter (`KPB = 128 // BK`), so the 128-wide scale blocks still line up when BK=64. The small-T path is unchanged from the best kernel, so those workloads should match attempt 4.
