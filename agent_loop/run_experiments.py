@@ -4,8 +4,10 @@ Runs the whole experiment on this laptop and builds the results table. One comma
 From the Nvidia-AI-Kernel folder (venv active, FIB_DATASET_PATH set, `claude` logged in):
 
   python agent_loop/run_experiments.py --smoke          quick check: Haiku, 2 attempts, 1 run
-  python agent_loop/run_experiments.py                  everything: 3 tiers x 3 runs, then the
-                                                        final full benchmark, then the table
+  python agent_loop/run_experiments.py                  everything: 3 Claude tiers + 3 non-ML
+                                                        baselines (handwritten, random search,
+                                                        autotune) x 3 runs, then the final full
+                                                        benchmark, then the table
   python agent_loop/run_experiments.py --table-only     just rebuild the table from saved results
 
 It is safe to stop (Ctrl+C) and start again: finished runs and finished final benchmarks are
@@ -36,6 +38,7 @@ sys.path.insert(0, str(HERE))
 import prompts  # noqa: E402
 from bench import RealBench  # noqa: E402
 
+BASELINES = ("handwritten", "random", "autotune")   # non-ML baselines (baseline_search.py)
 FULL_BENCH = {"warmup_runs": 3, "iterations": 100, "num_trials": 5, "stop_on_fail": False}
 
 
@@ -78,8 +81,13 @@ def agent_runs(cfg_path, cfg, tiers, n_runs, fake=False):
                 print(f"== {tier} run{run_id}: already finished, skipping")
                 continue
             print(f"\n== {tier} run{run_id}: starting", flush=True)
-            rc = subprocess.call([sys.executable, str(HERE / "run_agent.py"), "--config", str(cfg_path),
-                                  "--tier", tier, "--run-id", str(run_id)] + (["--fake"] if fake else []))
+            if tier in BASELINES:
+                cmd = [sys.executable, str(HERE / "baseline_search.py"), "--config", str(cfg_path),
+                       "--method", tier, "--run-id", str(run_id)]
+            else:
+                cmd = [sys.executable, str(HERE / "run_agent.py"), "--config", str(cfg_path),
+                       "--tier", tier, "--run-id", str(run_id)]
+            rc = subprocess.call(cmd + (["--fake"] if fake else []))
             if rc != 0:
                 print(f"!! {tier} run{run_id} exited with code {rc}. Fix the problem and run this script again.")
                 sys.exit(rc)
@@ -138,7 +146,8 @@ def build_table(cfg, tiers, n_runs):
             cost = s.get("total_cost_usd")
             rows.append({
                 "tier": tier, "run": run_id,
-                "model_ids": " ".join(s.get("model_ids_used") or [s.get("model") or ""]),
+                "model_ids": " ".join(s.get("model_ids_used") or ["-" if tier in BASELINES else (s.get("model") or "")]),
+                "timed_candidates": s.get("timed_candidates", s.get("attempts_made")),
                 "attempts": s.get("attempts_made"),
                 "first_correct_attempt": s.get("iterations_to_first_correct"),
                 "best_attempt": s.get("best_attempt"),
@@ -166,10 +175,13 @@ def build_table(cfg, tiers, n_runs):
           "Speedup = patched PyTorch reference latency / kernel latency, mean over all 19 workloads, "
           "full benchmark (3 warmup, 100 iterations, 5 trials). A run's speedup counts only if its best "
           "kernel passes all 19 workloads. Identical code measured 1.00-1.03x, so differences under ~3% are noise. "
-          "Cost is Claude Code's API-equivalent estimate; runs used a subscription and were not billed.", "",
+          "Cost is Claude Code's API-equivalent estimate; runs used a subscription and were not billed. "
+          "Non-ML baselines: handwritten = hand-written Triton kernel with a default config; random = random search "
+          "over its tile settings; autotune = Triton autotune over a curated config list; both searches get the same "
+          "number of timed candidates as a Claude run.", "",
           "## Per tier", "",
-          "| Tier | Runs | Runs with a correct kernel | Final speedup, median (min-max) | First correct attempt, median | API-equiv. cost per run, median | Model time per run, median (min) |",
-          "|---|---|---|---|---|---|---|"]
+          "| Method | Runs | Timed candidates per run | Runs with a correct kernel | Final speedup, median (min-max) | First correct attempt, median | API-equiv. cost per run, median | Model time per run, median (min) | Benchmark time per run, median (min) |",
+          "|---|---|---|---|---|---|---|---|---|"]
     for tier in tiers:
         tr = [r for r in rows if r["tier"] == tier]
         if not tr:
@@ -178,10 +190,14 @@ def build_table(cfg, tiers, n_runs):
         fc = [r["first_correct_attempt"] for r in tr if r["first_correct_attempt"] is not None]
         cs = [r["api_equiv_cost_usd"] for r in tr if r["api_equiv_cost_usd"] is not None]
         lm = [r["llm_minutes"] for r in tr]
+        bm = [r["bench_minutes"] for r in tr]
+        tc = [r["timed_candidates"] for r in tr if r["timed_candidates"] is not None]
         sp_txt = f"{statistics.median(sp):.2f}x ({min(sp):.2f}-{max(sp):.2f})" if sp else "-"
-        md.append(f"| {tier} | {len(tr)} | {len(sp)} | {sp_txt} | "
+        label = tier + (" (non-ML)" if tier in BASELINES else "")
+        md.append(f"| {label} | {len(tr)} | {fmt(statistics.median(tc), 0) if tc else '-'} | {len(sp)} | {sp_txt} | "
                   f"{fmt(statistics.median(fc), 0) if fc else '-'} | "
-                  f"{('$' + fmt(statistics.median(cs))) if cs else '-'} | {fmt(statistics.median(lm), 1)} |")
+                  f"{('$' + fmt(statistics.median(cs))) if cs else '-'} | {fmt(statistics.median(lm), 1)} | "
+                  f"{fmt(statistics.median(bm), 1)} |")
     md += ["", "## Per run", "",
            "| Tier | Run | Model | Attempts | First correct | Loop best | Final speedup | Final status | In/out tokens | API-equiv. $ | $ per 1.0x gain | Model min | Bench min |",
            "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
@@ -214,9 +230,13 @@ def main():
     if a.smoke:
         cfg_path = write_smoke_config(cfg_path)
         a.runs = 1
-        a.tiers = a.tiers or "haiku"
     cfg = load(cfg_path)
-    tiers = a.tiers.split(",") if a.tiers else list(cfg["tiers"].keys())
+    if a.tiers:
+        tiers = a.tiers.split(",")
+    elif a.smoke:
+        tiers = ["haiku"]
+    else:
+        tiers = list(cfg["tiers"].keys()) + list(BASELINES)
 
     if not a.table_only and not a.skip_agent:
         agent_runs(cfg_path, cfg, tiers, a.runs, fake=a.fake)

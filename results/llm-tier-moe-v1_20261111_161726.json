@@ -1,0 +1,24 @@
+{
+  "moe_fp8_block_scale_ds_routing_topk8_ng8_kg4_e32_h7168_i2048": {
+    "b8f4f012-a32e-4356-b4e1-7665b3d598af": {
+      "status": "PASSED",
+      "solution": "llm-tier-moe-v1",
+      "latency_ms": 4.272384166717529,
+      "reference_latency_ms": 38.45043182373047,
+      "speedup_factor": 8.999759928721934,
+      "max_abs_error": 128.0,
+      "max_rel_error": 0.007751937955617905,
+      "matched_ratio": 1.0
+    },
+    "e05c6c03-5603-4a1c-b34c-dcce0ecaeea4": {
+      "status": "PASSED",
+      "solution": "llm-tier-moe-v1",
+      "latency_ms": 2.2911360263824463,
+      "reference_latency_ms": 17.584863662719727,
+      "speedup_factor": 7.675172255261105,
+      "max_abs_error": 256.0,
+      "max_rel_error": 0.00561797758564353,
+      "matched_ratio": 1.0
+    }
+  }
+}
