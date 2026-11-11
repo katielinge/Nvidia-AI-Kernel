@@ -1,0 +1,51 @@
+# Settings shared by EVERY tier. Change these only as a team, and keep a copy with the results.
+[run]
+output_dir = "agent_runs"
+max_iterations = 15            # TEAM DECISION
+max_output_tokens = 16000      # TEAM DECISION
+# temperature = 1.0            # TEAM DECISION. Leave commented out to use the API default.
+cost_cap_usd = 25.0            # stop a single run when its API cost reaches this. TEAM DECISION
+# no_improve_patience = 5      # optional: stop after N correct attempts without improvement
+max_error_lines = 40
+benchmark_timeout_s = 1800
+
+gpu_name = "NVIDIA GeForce RTX 5060 Laptop GPU"
+compute_capability = "12.0"
+gpu_memory_gb = 8
+entry_point = "kernel"
+
+# Paths, relative to the Nvidia-AI-Kernel folder (run the loop from there)
+repo_root = "."
+dataset_path = "../mlsys26-contest"
+definition_json = "../mlsys26-contest/definitions/moe/moe_fp8_block_scale_ds_routing_topk8_ng8_kg4_e32_h7168_i2048.json"
+definition_name = "moe_fp8_block_scale_ds_routing_topk8_ng8_kg4_e32_h7168_i2048"
+
+# Benchmark settings used for EVERY attempt's feedback (same for all tiers). TEAM DECISION.
+# The final numbers for the report come from a separate full run (5 trials x 100 iters)
+# of each run's best_kernel.py with local_bench.py.
+[bench]
+warmup_runs = 3
+iterations = 20
+num_trials = 3
+ref_cache = "ref_latency.json"   # reference timed once, reused by every attempt and tier
+stop_on_fail = true              # one failing workload zeros the kernel, so stop early
+# atol = 0.01                    # TEAM DECISION: tool default for this MoE is atol=0.01,
+# rtol = 0.01                    # rtol=0.01, matched_ratio=0.95. Uncomment to change.
+# matched_ratio = 0.95
+
+# One section per model tier. Fill in the exact model IDs and prices from Anthropic's docs.
+# Prices are USD per million tokens. If left out, only tokens are logged (no cost).
+[tiers.haiku]
+model = "FILL-IN-HAIKU-MODEL-ID"
+# price_in_per_mtok = 0.0
+# price_out_per_mtok = 0.0
+
+[tiers.sonnet]
+model = "FILL-IN-SONNET-MODEL-ID"
+# price_in_per_mtok = 0.0
+# price_out_per_mtok = 0.0
+
+[tiers.opus]
+model = "FILL-IN-OPUS-MODEL-ID"
+# price_in_per_mtok = 0.0
+# price_out_per_mtok = 0.0
