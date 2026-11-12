@@ -1,0 +1,56 @@
+[
+  {
+    "cfg1": {
+      "BLOCK_M": 16,
+      "BLOCK_N": 32,
+      "BLOCK_K": 32,
+      "num_warps": 8,
+      "num_stages": 3
+    },
+    "cfg2": {
+      "BLOCK_M": 32,
+      "BLOCK_N": 64,
+      "BLOCK_K": 128,
+      "num_warps": 4,
+      "num_stages": 4,
+      "PREC": "ieee"
+    },
+    "reason": "OUT_OF_RESOURCES"
+  },
+  {
+    "cfg1": {
+      "BLOCK_M": 128,
+      "BLOCK_N": 128,
+      "BLOCK_K": 32,
+      "num_warps": 8,
+      "num_stages": 2
+    },
+    "cfg2": {
+      "BLOCK_M": 16,
+      "BLOCK_N": 128,
+      "BLOCK_K": 128,
+      "num_warps": 8,
+      "num_stages": 3,
+      "PREC": "ieee"
+    },
+    "reason": "OUT_OF_RESOURCES"
+  },
+  {
+    "cfg1": {
+      "BLOCK_M": 32,
+      "BLOCK_N": 128,
+      "BLOCK_K": 128,
+      "num_warps": 8,
+      "num_stages": 4
+    },
+    "cfg2": {
+      "BLOCK_M": 128,
+      "BLOCK_N": 32,
+      "BLOCK_K": 32,
+      "num_warps": 8,
+      "num_stages": 2,
+      "PREC": "tf32"
+    },
+    "reason": "OUT_OF_RESOURCES"
+  }
+]

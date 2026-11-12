@@ -1,0 +1,132 @@
+{
+  "status": "CORRECT",
+  "mean_speedup": 8.016039297285587,
+  "n_total": 19,
+  "n_failed": 0,
+  "max_abs_error": 4096.0,
+  "max_rel_error": 29492188.0,
+  "workloads": [
+    {
+      "id": "b8f4f012",
+      "latency_ms": 5.412098424911499,
+      "reference_latency_ms": 38.47887333679199,
+      "speedup": 7.109788166393374
+    },
+    {
+      "id": "e05c6c03",
+      "latency_ms": 3.0978943338394167,
+      "reference_latency_ms": 19.066259040832517,
+      "speedup": 6.154586627621509
+    },
+    {
+      "id": "6230e838",
+      "latency_ms": 11.454243963241577,
+      "reference_latency_ms": 108.48475466918944,
+      "speedup": 9.471140567403108
+    },
+    {
+      "id": "8f1ff9f1",
+      "latency_ms": 15.057898702621461,
+      "reference_latency_ms": 138.85655819702149,
+      "speedup": 9.221509650137815
+    },
+    {
+      "id": "1a4c6ba1",
+      "latency_ms": 25.225607120513917,
+      "reference_latency_ms": 195.78700482177734,
+      "speedup": 7.76143875889353
+    },
+    {
+      "id": "a7c2bcfd",
+      "latency_ms": 7.700606911659241,
+      "reference_latency_ms": 67.56962268066407,
+      "speedup": 8.774584062765115
+    },
+    {
+      "id": "2e69caee",
+      "latency_ms": 3.9789628200531006,
+      "reference_latency_ms": 29.237229885101318,
+      "speedup": 7.347952521132413
+    },
+    {
+      "id": "8cba5890",
+      "latency_ms": 7.281586179733276,
+      "reference_latency_ms": 61.72182360839844,
+      "speedup": 8.476425614543684
+    },
+    {
+      "id": "5e8dc11c",
+      "latency_ms": 194.7870894165039,
+      "reference_latency_ms": 461.1156276855469,
+      "speedup": 2.3672802395007064
+    },
+    {
+      "id": "58a34f27",
+      "latency_ms": 130.6152878265381,
+      "reference_latency_ms": 357.33409912109374,
+      "speedup": 2.735775459880673
+    },
+    {
+      "id": "5eadab1e",
+      "latency_ms": 10.085000616073609,
+      "reference_latency_ms": 91.79442559814453,
+      "speedup": 9.102074366940677
+    },
+    {
+      "id": "eedc63b2",
+      "latency_ms": 10.386641353607178,
+      "reference_latency_ms": 95.7434878692627,
+      "speedup": 9.217944916911176
+    },
+    {
+      "id": "e626d3e6",
+      "latency_ms": 13.915196802139281,
+      "reference_latency_ms": 130.90147244262695,
+      "speedup": 9.407087395451176
+    },
+    {
+      "id": "74d7ff04",
+      "latency_ms": 13.349816577911378,
+      "reference_latency_ms": 126.46977514648438,
+      "speedup": 9.473521558022108
+    },
+    {
+      "id": "4822167c",
+      "latency_ms": 13.557922689437868,
+      "reference_latency_ms": 131.93371411132813,
+      "speedup": 9.731115682943779
+    },
+    {
+      "id": "81955b1e",
+      "latency_ms": 12.734995204925536,
+      "reference_latency_ms": 121.92667530822754,
+      "speedup": 9.574143794029052
+    },
+    {
+      "id": "76010cb4",
+      "latency_ms": 12.153802560806275,
+      "reference_latency_ms": 118.61302114868165,
+      "speedup": 9.759334212914263
+    },
+    {
+      "id": "fc378037",
+      "latency_ms": 12.5599674949646,
+      "reference_latency_ms": 114.21814587402343,
+      "speedup": 9.09382495773293
+    },
+    {
+      "id": "f7d6ac7c",
+      "latency_ms": 9.462292990684508,
+      "reference_latency_ms": 71.20581843566895,
+      "speedup": 7.5252180952090635
+    }
+  ],
+  "error_text": "",
+  "settings": {
+    "warmup_runs": 3,
+    "iterations": 100,
+    "num_trials": 5,
+    "ref_cache": "ref_latency.json",
+    "stop_on_fail": false
+  }
+}

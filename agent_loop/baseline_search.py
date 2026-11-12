@@ -4,7 +4,9 @@ budget of timed candidates as a Claude run (run.max_iterations in run_config.tom
 
   handwritten  the hand-written Triton kernel (baseline_kernel.py) with one sensible default
                config, no tuning: 1 timed candidate
-  random       random search over tile settings: `budget` timed candidates, best one kept
+  random       random search over tile settings: `budget` timed candidates, best one kept.
+               Settings that do not fit in the GPU's shared memory are detected with a quick
+               compile check and redrawn (not counted), as Triton's autotuner also skips them.
   autotune     Triton's @autotune choosing among `budget` configs at run time, per
                token-count bucket: 1 benchmarked kernel that times `budget` configs internally
 
@@ -69,6 +71,47 @@ AUTOTUNE_POOL = [
 ]
 
 
+FEASIBILITY_CHECK = r"""
+import sys, importlib.util, torch
+spec = importlib.util.spec_from_file_location("cand", sys.argv[1])
+m = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(m)
+d, T, f8 = "cuda", 8, torch.float8_e4m3fn
+bias = torch.zeros(256)
+bias[:32] = 10.0                       # route every token to local experts so both kernels launch
+args = dict(
+    routing_logits=torch.randn(T, 256, device=d),
+    routing_bias=bias.to(d).to(torch.bfloat16),
+    hidden_states=torch.zeros(T, 7168, device=d).to(f8),
+    hidden_states_scale=torch.ones(56, T, device=d),
+    gemm1_weights=torch.zeros(32, 4096, 7168, dtype=f8, device=d),
+    gemm1_weights_scale=torch.ones(32, 32, 56, device=d),
+    gemm2_weights=torch.zeros(32, 7168, 2048, dtype=f8, device=d),
+    gemm2_weights_scale=torch.ones(32, 56, 16, device=d),
+    local_expert_offset=0, routed_scaling_factor=2.5)
+try:
+    m.kernel(**args)
+    torch.cuda.synchronize()
+    print("FEASIBLE")
+except Exception as e:
+    msg = type(e).__name__ + ": " + str(e)
+    print("OUT_OF_RESOURCES" if ("OutOfResources" in msg or "out of resource" in msg) else "OTHER " + msg[:300])
+"""
+
+
+def feasible(code: str, out_dir: Path) -> tuple[bool, str]:
+    """Compile-and-launch check on a tiny input. Only 'out of resources' counts as infeasible
+    (like Triton's autotuner, which skips such configs); any other error is left to the benchmark."""
+    import subprocess
+    cand = out_dir / "_feasibility_candidate.py"
+    cand.write_text(code, encoding="utf-8")
+    proc = subprocess.run([sys.executable, "-c", FEASIBILITY_CHECK, str(cand)],
+                          capture_output=True, text=True, timeout=600)
+    out = (proc.stdout or "").strip().splitlines()
+    verdict = out[-1] if out else ("OTHER " + (proc.stderr or "")[-300:])
+    return (not verdict.startswith("OUT_OF_RESOURCES")), verdict
+
+
 def sample(rng: random.Random) -> dict:
     return {k: rng.choice(v) for k, v in SPACE.items()}
 
@@ -87,14 +130,14 @@ def candidates(method: str, budget: int, run_id: int):
     elif method == "random":
         rng = random.Random(1000 + run_id)
         seen = set()
-        while len(seen) < budget:
+        while True:                     # main() stops after `budget` feasible candidates
             c1, c2 = sample(rng), sample(rng)
             c2["PREC"] = rng.choice(PRECISIONS)
             key = json.dumps([c1, c2], sort_keys=True)
             if key in seen:
                 continue
             seen.add(key)
-            yield f"random #{len(seen)}", c1, c2, None
+            yield f"random draw #{len(seen)}", c1, c2, None
     elif method == "autotune":
         yield f"autotune over {min(budget, len(AUTOTUNE_POOL))} configs", DEFAULT1, DEFAULT2, \
             AUTOTUNE_POOL[:budget]
@@ -128,10 +171,19 @@ def main():
     best_code = best_sp = best_attempt = first_correct = None
     total_bench = 0.0
     n = 0
+    rejected = []
     try:
         for desc, c1, c2, at in candidates(a.method, budget, a.run_id):
-            n += 1
+            if n >= budget:
+                break
             code = make_source(template, c1, c2, at)
+            if a.method == "random" and not a.fake:
+                ok, verdict = feasible(code, out_dir)
+                if not ok:
+                    rejected.append({"cfg1": c1, "cfg2": c2, "reason": verdict[:200]})
+                    print(f"[{a.method} run{a.run_id}] {desc}: skipped (does not fit in GPU shared memory)", flush=True)
+                    continue
+            n += 1
             (out_dir / f"attempt_{n:02d}_kernel.py").write_text(code, encoding="utf-8")
             t0 = time.time()
             res = bench.run(code)
@@ -162,12 +214,16 @@ def main():
         "tier": a.method, "model": "none (non-ML baseline)", "run_id": str(a.run_id), "fake": a.fake,
         "attempts_made": n, "stop_reason": "budget", "budget": budget,
         "timed_candidates": len(AUTOTUNE_POOL[:budget]) if a.method == "autotune" else n,
+        "skipped_infeasible": len(rejected),
         "iterations_to_first_correct": first_correct, "best_mean_speedup": best_sp, "best_attempt": best_attempt,
         "total_input_tokens": 0, "total_output_tokens": 0, "total_cost_usd": 0.0,
         "model_ids_used": [], "total_llm_seconds": 0.0, "total_bench_seconds": round(total_bench, 1),
         "bench_settings": cfg.get("bench", {}),
     }
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    if rejected:
+        (out_dir / "skipped_infeasible.json").write_text(json.dumps(rejected, indent=2), encoding="utf-8")
+    (out_dir / "_feasibility_candidate.py").unlink(missing_ok=True)
     if best_code:
         (out_dir / "best_kernel.py").write_text(best_code, encoding="utf-8")
     print(json.dumps(summary, indent=2))

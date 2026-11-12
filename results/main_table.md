@@ -1,14 +1,17 @@
 # Results: Claude tiers on the FlashInfer MoE kernel (RTX 5060 Laptop GPU)
 
-Speedup = patched PyTorch reference latency / kernel latency, mean over all 19 workloads, full benchmark (3 warmup, 100 iterations, 5 trials). A run's speedup counts only if its best kernel passes all 19 workloads. Identical code measured 1.00-1.03x, so differences under ~3% are noise. Cost is Claude Code's API-equivalent estimate; runs used a subscription and were not billed.
+Speedup = patched PyTorch reference latency / kernel latency, mean over all 19 workloads, full benchmark (3 warmup, 100 iterations, 5 trials). A run's speedup counts only if its best kernel passes all 19 workloads. Identical code measured 1.00-1.03x, so differences under ~3% are noise. Cost is Claude Code's API-equivalent estimate; runs used a subscription and were not billed. Non-ML baselines: handwritten = hand-written Triton kernel with a default config; random = random search over its tile settings; autotune = Triton autotune over a curated config list; both searches get the same number of timed candidates as a Claude run.
 
 ## Per tier
 
-| Tier | Runs | Runs with a correct kernel | Final speedup, median (min-max) | First correct attempt, median | API-equiv. cost per run, median | Model time per run, median (min) |
-|---|---|---|---|---|---|---|
-| haiku | 3 | 3 | 1.44x (1.43-1.45) | 1 | $0.03 | 2.8 |
-| sonnet | 3 | 3 | 17.54x (14.73-18.00) | 2 | $0.98 | 6.1 |
-| opus | 3 | 3 | 20.17x (18.46-28.53) | 3 | $3.07 | 14.7 |
+| Method | Runs | Timed candidates per run | Runs with a correct kernel | Final speedup, median (min-max) | First correct attempt, median | API-equiv. cost per run, median | Model time per run, median (min) | Benchmark time per run, median (min) |
+|---|---|---|---|---|---|---|---|---|
+| haiku | 3 | 15 | 3 | 1.44x (1.43-1.45) | 1 | $0.03 | 2.8 | 22.0 |
+| sonnet | 3 | 15 | 3 | 17.54x (14.73-18.00) | 2 | $0.98 | 6.1 | 14.4 |
+| opus | 3 | 15 | 3 | 20.17x (18.46-28.53) | 3 | $3.07 | 14.7 | 10.5 |
+| handwritten (non-ML) | 3 | 1 | 3 | 8.02x (8.02-8.05) | 1 | $0.00 | 0.0 | 1.2 |
+| random (non-ML) | 3 | 15 | 3 | 11.18x (9.88-11.33) | 1 | $0.00 | 0.0 | 66.3 |
+| autotune (non-ML) | 3 | 15 | 3 | 11.51x (11.48-11.84) | 1 | $0.00 | 0.0 | 2.3 |
 
 ## Per run
 
@@ -23,3 +26,12 @@ Speedup = patched PyTorch reference latency / kernel latency, mean over all 19 w
 | opus | 1 | claude-opus-5-5 | 15 | 2 | 21.28x | 20.175x | CORRECT | 133200/91339 | 2.83 | 0.15 | 12.0 | 9.8 |
 | opus | 2 | claude-opus-5-5 | 15 | 3 | 29.95x | 28.535x | CORRECT | 124287/107020 | 3.07 | 0.11 | 14.7 | 10.5 |
 | opus | 3 | claude-opus-5-5 | 15 | 3 | 19.70x | 18.457x | CORRECT | 135058/112239 | 3.26 | 0.19 | 14.7 | 16.0 |
+| handwritten | 1 | - | 1 | 1 | 7.86x | 8.016x | CORRECT | 0/0 | 0.00 | 0.00 | 0.0 | 1.5 |
+| handwritten | 2 | - | 1 | 1 | 8.25x | 8.022x | CORRECT | 0/0 | 0.00 | 0.00 | 0.0 | 1.2 |
+| handwritten | 3 | - | 1 | 1 | 8.29x | 8.046x | CORRECT | 0/0 | 0.00 | 0.00 | 0.0 | 1.2 |
+| random | 1 | - | 15 | 1 | 9.42x | 9.881x | CORRECT | 0/0 | 0.00 | 0.00 | 0.0 | 73.1 |
+| random | 2 | - | 15 | 1 | 11.66x | 11.179x | CORRECT | 0/0 | 0.00 | 0.00 | 0.0 | 56.8 |
+| random | 3 | - | 15 | 1 | 11.46x | 11.326x | CORRECT | 0/0 | 0.00 | 0.00 | 0.0 | 66.3 |
+| autotune | 1 | - | 1 | 1 | 11.68x | 11.514x | CORRECT | 0/0 | 0.00 | 0.00 | 0.0 | 3.9 |
+| autotune | 2 | - | 1 | 1 | 12.05x | 11.480x | CORRECT | 0/0 | 0.00 | 0.00 | 0.0 | 2.3 |
+| autotune | 3 | - | 1 | 1 | 12.04x | 11.835x | CORRECT | 0/0 | 0.00 | 0.00 | 0.0 | 1.9 |

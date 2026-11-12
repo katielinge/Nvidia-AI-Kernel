@@ -1,0 +1,27 @@
+{
+  "tier": "random",
+  "model": "none (non-ML baseline)",
+  "run_id": "1",
+  "fake": false,
+  "attempts_made": 15,
+  "stop_reason": "budget",
+  "budget": 15,
+  "timed_candidates": 15,
+  "skipped_infeasible": 3,
+  "iterations_to_first_correct": 1,
+  "best_mean_speedup": 9.42190173524491,
+  "best_attempt": 2,
+  "total_input_tokens": 0,
+  "total_output_tokens": 0,
+  "total_cost_usd": 0.0,
+  "model_ids_used": [],
+  "total_llm_seconds": 0.0,
+  "total_bench_seconds": 4384.4,
+  "bench_settings": {
+    "warmup_runs": 3,
+    "iterations": 20,
+    "num_trials": 3,
+    "ref_cache": "ref_latency.json",
+    "stop_on_fail": true
+  }
+}
