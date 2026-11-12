@@ -23,11 +23,21 @@ GPU (8 GB). Median of 3 runs, with the lowest and highest run in brackets.
 | Hand-written Triton kernel, untuned (non-ML) | 1 | 8.02x (8.02–8.05) | $0 |
 | Random search over tile settings (non-ML) | 15 | 11.18x (9.88–11.33) | $0 |
 | Triton autotune (non-ML) | 15 | 11.51x (11.48–11.84) | $0 |
+| Autotune + FP8 tensor-core dot (non-ML, ablation) | 15 | 12.19x (12.01–12.35) | $0 |
 | Sonnet 5.5 | 15 | 17.54x (14.73–18.00) | $0.98 |
 | Opus 5.5 | 15 | 20.17x (18.46–28.53) | $3.07 |
 
 Against the best non-ML baseline (Triton autotune), Sonnet is 1.52x faster and Opus 1.75x faster.
-Haiku is slower than every baseline. The full table, with every run, is
+Haiku is slower than every baseline: none of its 45 attempts used Triton.
+
+**Why.** FP8 tensor-core multiplies, used by every Sonnet and Opus kernel, add only 6% when given to
+the baseline. A knock-out ablation of Sonnet run 1's kernel ([results/ablation.md](results/ablation.md))
+switches its three design choices back to the baseline's: without them it falls from 16.8x to 8.8x.
+The largest single factor (−21% when removed) is its rewrite of the second matrix multiply as two
+bf16 tensor-core multiplies of a high/low split, which no tile search can reach.
+
+**Transfer.** All 21 best kernels passed 26 workloads they were never developed on; the lead over
+autotune shrank to 1.34x (Sonnet) and 1.65x (Opus) ([results/transfer.md](results/transfer.md)). The full table, with every run, is
 [results/main_table.md](results/main_table.md). The per-workload breakdown and the design features
 of each best kernel are in [results/analysis.md](results/analysis.md), and the transfer test on
 unseen workloads is in [results/transfer.md](results/transfer.md).
@@ -54,6 +64,7 @@ delete or rename `agent_runs/`, then
 ```
 python agent_loop/run_experiments.py      # all agent runs, baselines, final benchmarks, table
 python agent_loop/transfer_test.py        # best kernels on 26 unseen workloads
+python agent_loop/ablation_knockout.py    # knock-out ablation of Sonnet run 1's kernel
 python agent_loop/analyze_results.py      # figures and per-workload analysis
 ```
 
@@ -144,6 +155,7 @@ agent_loop/            the experiment
   bench.py, bench_worker.py   benchmark one kernel in a separate process
   baseline_kernel.py, baseline_search.py   the non-ML baselines
   transfer_test.py     best kernels on unseen workloads
+  ablation_knockout.py switches Sonnet's design choices back to the baseline's, one at a time
   analyze_results.py   figures and per-workload analysis
   run_config.toml      every setting, shared by all methods
 local_bench.py         in-process FlashInfer-Bench runner for Windows and small GPUs
@@ -151,7 +163,8 @@ patched_reference.py, verify_patch.py, apply_patch.py   the memory-patched refer
 ref_latency.json       reference timings on our GPU
 agent_runs/<method>_run<k>/   every attempt's reply and kernel, log.jsonl, best_kernel.py,
                               summary.json, final_bench.json
-results/               main_table.md, runs.csv, analysis.md, transfer.md, figures
+results/               main_table.md, runs.csv, analysis.md, transfer.md, ablation.md, figures
+report/                final report (Word) and presentation (PowerPoint)
 ```
 
 ## AI use disclosure
