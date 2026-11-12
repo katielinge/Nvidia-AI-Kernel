@@ -9,6 +9,8 @@ budget of timed candidates as a Claude run (run.max_iterations in run_config.tom
                compile check and redrawn (not counted), as Triton's autotuner also skips them.
   autotune     Triton's @autotune choosing among `budget` configs at run time, per
                token-count bucket: 1 benchmarked kernel that times `budget` configs internally
+  autotune_fp8 ablation: same as autotune, but GEMM1 uses FP8 tensor-core dots (the one design
+               choice every Sonnet/Opus best kernel made and the baselines lacked)
 
 Output goes in agent_runs/<method>_run<k>/ in the same format as a Claude run (log.jsonl,
 attempt kernels, best_kernel.py, summary.json), so run_experiments.py handles the final
@@ -34,7 +36,7 @@ sys.path.insert(0, str(HERE))
 import prompts  # noqa: E402
 from bench import FakeBench, RealBench  # noqa: E402
 
-METHODS = ("handwritten", "random", "autotune")
+METHODS = ("handwritten", "random", "autotune", "autotune_fp8")
 
 # Search space. BLOCK_N and BLOCK_K must divide 128 (one scale per tile); BLOCK_M >= 16 for tl.dot.
 SPACE = {
@@ -141,6 +143,9 @@ def candidates(method: str, budget: int, run_id: int):
     elif method == "autotune":
         yield f"autotune over {min(budget, len(AUTOTUNE_POOL))} configs", DEFAULT1, DEFAULT2, \
             AUTOTUNE_POOL[:budget]
+    elif method == "autotune_fp8":
+        yield f"autotune over {min(budget, len(AUTOTUNE_POOL))} configs, FP8 dot", \
+            dict(DEFAULT1, FP8_DOT=True), DEFAULT2, AUTOTUNE_POOL[:budget]
     else:
         raise SystemExit(f"unknown method {method}")
 
@@ -213,7 +218,7 @@ def main():
     summary = {
         "tier": a.method, "model": "none (non-ML baseline)", "run_id": str(a.run_id), "fake": a.fake,
         "attempts_made": n, "stop_reason": "budget", "budget": budget,
-        "timed_candidates": len(AUTOTUNE_POOL[:budget]) if a.method == "autotune" else n,
+        "timed_candidates": len(AUTOTUNE_POOL[:budget]) if a.method.startswith("autotune") else n,
         "skipped_infeasible": len(rejected),
         "iterations_to_first_correct": first_correct, "best_mean_speedup": best_sp, "best_attempt": best_attempt,
         "total_input_tokens": 0, "total_output_tokens": 0, "total_cost_usd": 0.0,

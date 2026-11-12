@@ -1,0 +1,158 @@
+{
+  "889edf74": {
+    "set": "shifted",
+    "tokens": 7,
+    "offset": 32,
+    "from": "b8f4f012"
+  },
+  "a3a6bcd5": {
+    "set": "shifted",
+    "tokens": 1,
+    "offset": 128,
+    "from": "e05c6c03"
+  },
+  "17db2d08": {
+    "set": "shifted",
+    "tokens": 32,
+    "offset": 128,
+    "from": "6230e838"
+  },
+  "e3d9a519": {
+    "set": "shifted",
+    "tokens": 80,
+    "offset": 192,
+    "from": "8f1ff9f1"
+  },
+  "69b74f93": {
+    "set": "shifted",
+    "tokens": 901,
+    "offset": 192,
+    "from": "1a4c6ba1"
+  },
+  "a4546a37": {
+    "set": "shifted",
+    "tokens": 16,
+    "offset": 64,
+    "from": "a7c2bcfd"
+  },
+  "2beb9cf0": {
+    "set": "shifted",
+    "tokens": 15,
+    "offset": 128,
+    "from": "2e69caee"
+  },
+  "08497704": {
+    "set": "shifted",
+    "tokens": 14,
+    "offset": 96,
+    "from": "8cba5890"
+  },
+  "239a3b55": {
+    "set": "shifted",
+    "tokens": 14107,
+    "offset": 128,
+    "from": "5e8dc11c"
+  },
+  "87160cde": {
+    "set": "shifted",
+    "tokens": 11948,
+    "offset": 224,
+    "from": "58a34f27"
+  },
+  "d3e55abe": {
+    "set": "shifted",
+    "tokens": 62,
+    "offset": 192,
+    "from": "5eadab1e"
+  },
+  "22d282b9": {
+    "set": "shifted",
+    "tokens": 59,
+    "offset": 0,
+    "from": "eedc63b2"
+  },
+  "97c3f391": {
+    "set": "shifted",
+    "tokens": 58,
+    "offset": 160,
+    "from": "e626d3e6"
+  },
+  "c81b777d": {
+    "set": "shifted",
+    "tokens": 57,
+    "offset": 192,
+    "from": "74d7ff04"
+  },
+  "c4e0f046": {
+    "set": "shifted",
+    "tokens": 56,
+    "offset": 160,
+    "from": "4822167c"
+  },
+  "aab5d7d1": {
+    "set": "shifted",
+    "tokens": 55,
+    "offset": 224,
+    "from": "81955b1e"
+  },
+  "8fbf2c21": {
+    "set": "shifted",
+    "tokens": 54,
+    "offset": 224,
+    "from": "76010cb4"
+  },
+  "c72d429c": {
+    "set": "shifted",
+    "tokens": 53,
+    "offset": 128,
+    "from": "fc378037"
+  },
+  "fdf3202e": {
+    "set": "shifted",
+    "tokens": 52,
+    "offset": 0,
+    "from": "f7d6ac7c"
+  },
+  "4607f6c4": {
+    "set": "new size",
+    "tokens": 3,
+    "offset": 0,
+    "from": null
+  },
+  "27ed3f78": {
+    "set": "new size",
+    "tokens": 24,
+    "offset": 64,
+    "from": null
+  },
+  "4343cbe7": {
+    "set": "new size",
+    "tokens": 128,
+    "offset": 160,
+    "from": null
+  },
+  "b53ca7f5": {
+    "set": "new size",
+    "tokens": 256,
+    "offset": 224,
+    "from": null
+  },
+  "dc8409e4": {
+    "set": "new size",
+    "tokens": 512,
+    "offset": 32,
+    "from": null
+  },
+  "3dd7810a": {
+    "set": "new size",
+    "tokens": 2048,
+    "offset": 96,
+    "from": null
+  },
+  "653b86c0": {
+    "set": "new size",
+    "tokens": 4096,
+    "offset": 128,
+    "from": null
+  }
+}

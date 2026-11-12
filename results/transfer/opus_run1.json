@@ -1,0 +1,236 @@
+{
+  "889edf74-ea8e-59c4-baa5-dc0b6b8f0780": {
+    "status": "PASSED",
+    "latency_ms": 3.349600001176198,
+    "reference_latency_ms": 47.08484204610189,
+    "speedup_factor": 14.056855155710606,
+    "max_abs_error": 2048.0,
+    "max_rel_error": 2.0886075496673584,
+    "matched_ratio": 0.9936025191326531
+  },
+  "a3a6bcd5-a614-5b9f-aa56-51255f2a18d4": {
+    "status": "PASSED",
+    "latency_ms": 2.218608542283376,
+    "reference_latency_ms": 13.389930168787638,
+    "speedup_factor": 6.0352828872671775,
+    "max_abs_error": 1024.0,
+    "max_rel_error": 6.756756782531738,
+    "matched_ratio": 0.986328125
+  },
+  "17db2d08-9c4b-51ce-93bd-7bc0034cde0c": {
+    "status": "PASSED",
+    "latency_ms": 4.089978686968485,
+    "reference_latency_ms": 82.70274200439452,
+    "speedup_factor": 20.220824687400572,
+    "max_abs_error": 4096.0,
+    "max_rel_error": 174.53842163085938,
+    "matched_ratio": 0.9933297293526786
+  },
+  "e3d9a519-a04b-52a2-9b10-93777b03cf93": {
+    "status": "PASSED",
+    "latency_ms": 5.4341258446375535,
+    "reference_latency_ms": 124.39729042053223,
+    "speedup_factor": 22.891867795680266,
+    "max_abs_error": 2048.0,
+    "max_rel_error": 382.4223937988281,
+    "matched_ratio": 0.9951503208705357
+  },
+  "69b74f93-303e-520f-8239-2801512bf7ef": {
+    "status": "PASSED",
+    "latency_ms": 7.3551296075185135,
+    "reference_latency_ms": 179.61871897379558,
+    "speedup_factor": 24.420877477153752,
+    "max_abs_error": 4096.0,
+    "max_rel_error": 1992.9949951171875,
+    "matched_ratio": 0.9941643151954178
+  },
+  "a4546a37-db4a-5e27-916c-2ab7ace1547d": {
+    "status": "PASSED",
+    "latency_ms": 2.6215226570765178,
+    "reference_latency_ms": 41.349676386515306,
+    "speedup_factor": 15.773152398624637,
+    "max_abs_error": 2048.0,
+    "max_rel_error": 262.8048400878906,
+    "matched_ratio": 0.9948992047991071
+  },
+  "2beb9cf0-5127-5bb6-9fef-69158bb9f25e": {
+    "status": "PASSED",
+    "latency_ms": 3.5266778628031417,
+    "reference_latency_ms": 45.411902364095056,
+    "speedup_factor": 12.876680017493829,
+    "max_abs_error": 2048.0,
+    "max_rel_error": 38.77777862548828,
+    "matched_ratio": 0.9949032738095238
+  },
+  "08497704-0489-5c64-9634-881a7b50013e": {
+    "status": "PASSED",
+    "latency_ms": 3.6890138546625777,
+    "reference_latency_ms": 73.06742362976074,
+    "speedup_factor": 19.806763137365333,
+    "max_abs_error": 2048.0,
+    "max_rel_error": 13.281481742858887,
+    "matched_ratio": 0.9936025191326531
+  },
+  "239a3b55-71d8-5ed0-9f19-31837bcfc916": {
+    "status": "PASSED",
+    "latency_ms": 57.76855697631836,
+    "reference_latency_ms": 363.5456049601237,
+    "speedup_factor": 6.293139797643821,
+    "max_abs_error": 8192.0,
+    "max_rel_error": 690625024.0,
+    "matched_ratio": 0.9954173190994339
+  },
+  "87160cde-1b3f-5f09-9f67-8913b375466e": {
+    "status": "PASSED",
+    "latency_ms": 60.20646724700928,
+    "reference_latency_ms": 382.3073633829752,
+    "speedup_factor": 6.3499384844236335,
+    "max_abs_error": 4096.0,
+    "max_rel_error": 1581250048.0,
+    "matched_ratio": 0.99414803947687
+  },
+  "d3e55abe-a502-5a4d-aa95-551ec3c318b6": {
+    "status": "PASSED",
+    "latency_ms": 5.362386687596639,
+    "reference_latency_ms": 106.67002563476562,
+    "speedup_factor": 19.892266606117122,
+    "max_abs_error": 4096.0,
+    "max_rel_error": 120.46665954589844,
+    "matched_ratio": 0.9932540682603687
+  },
+  "22d282b9-c118-5ca9-a835-e13d5ba5763d": {
+    "status": "PASSED",
+    "latency_ms": 4.257448550065359,
+    "reference_latency_ms": 102.83077837626139,
+    "speedup_factor": 24.15314646014519,
+    "max_abs_error": 2048.0,
+    "max_rel_error": 132.77438354492188,
+    "matched_ratio": 0.9931711561743342
+  },
+  "97c3f391-7b65-56a4-bfc6-c2466c670f36": {
+    "status": "PASSED",
+    "latency_ms": 3.953551999727885,
+    "reference_latency_ms": 82.87094205220541,
+    "speedup_factor": 20.961136228361042,
+    "max_abs_error": 2048.0,
+    "max_rel_error": 63.588233947753906,
+    "matched_ratio": 0.9966662176724138
+  },
+  "c81b777d-506b-5bd2-b800-ba2be959c3b9": {
+    "status": "PASSED",
+    "latency_ms": 4.7164431571960455,
+    "reference_latency_ms": 115.11867294311524,
+    "speedup_factor": 24.407942406233516,
+    "max_abs_error": 2048.0,
+    "max_rel_error": 46.88811111450195,
+    "matched_ratio": 0.9937857338659147
+  },
+  "c4e0f046-a034-55c2-a86b-6d379512dcb5": {
+    "status": "PASSED",
+    "latency_ms": 3.8222997387250266,
+    "reference_latency_ms": 77.90523465474446,
+    "speedup_factor": 20.381770133163517,
+    "max_abs_error": 2048.0,
+    "max_rel_error": 188.36984252929688,
+    "matched_ratio": 0.9966667330994898
+  },
+  "aab5d7d1-41e2-53ec-9f81-12605e85c6a6": {
+    "status": "PASSED",
+    "latency_ms": 5.197788278261821,
+    "reference_latency_ms": 119.72857780456543,
+    "speedup_factor": 23.034523800304456,
+    "max_abs_error": 4096.0,
+    "max_rel_error": 813.9725341796875,
+    "matched_ratio": 0.9939579951298702
+  },
+  "8fbf2c21-4cc1-5bd0-97f6-b26e9125624d": {
+    "status": "PASSED",
+    "latency_ms": 4.657725318272909,
+    "reference_latency_ms": 111.01857935587566,
+    "speedup_factor": 23.835364211009658,
+    "max_abs_error": 2048.0,
+    "max_rel_error": 292.7208557128906,
+    "matched_ratio": 0.9940812045304233
+  },
+  "c72d429c-7308-51a0-bd3f-21ff5f8eb83d": {
+    "status": "PASSED",
+    "latency_ms": 4.3216512163480125,
+    "reference_latency_ms": 87.24414978027345,
+    "speedup_factor": 20.187688782066644,
+    "max_abs_error": 2048.0,
+    "max_rel_error": 11.147368431091309,
+    "matched_ratio": 0.9955225530660378
+  },
+  "fdf3202e-d3f7-54fb-bc34-edfa4295e7f3": {
+    "status": "PASSED",
+    "latency_ms": 4.768935465812683,
+    "reference_latency_ms": 107.20368181864421,
+    "speedup_factor": 22.479583250216084,
+    "max_abs_error": 2048.0,
+    "max_rel_error": 245.244873046875,
+    "matched_ratio": 0.9937972184065934
+  },
+  "4607f6c4-79a6-5a7a-9497-2bd2760995b5": {
+    "status": "PASSED",
+    "latency_ms": 2.1905973305304847,
+    "reference_latency_ms": 13.409601525465646,
+    "speedup_factor": 6.12143607525456,
+    "max_abs_error": 2048.0,
+    "max_rel_error": 6.647798538208008,
+    "matched_ratio": 0.9896298363095238
+  },
+  "27ed3f78-d12b-5cc7-bd9b-6dd901457514": {
+    "status": "PASSED",
+    "latency_ms": 4.4057573239008585,
+    "reference_latency_ms": 91.70797144571941,
+    "speedup_factor": 20.81548408220568,
+    "max_abs_error": 2048.0,
+    "max_rel_error": 1128.99853515625,
+    "matched_ratio": 0.9928269159226191
+  },
+  "4343cbe7-58ca-547d-bcbc-cc9a34e981bd": {
+    "status": "PASSED",
+    "latency_ms": 5.451276270548502,
+    "reference_latency_ms": 141.73647130330403,
+    "speedup_factor": 26.000603210859214,
+    "max_abs_error": 2048.0,
+    "max_rel_error": 196.19998168945312,
+    "matched_ratio": 0.9949090140206474
+  },
+  "b53ca7f5-c238-5989-81c3-a45c22e39d2c": {
+    "status": "PASSED",
+    "latency_ms": 6.033803709348042,
+    "reference_latency_ms": 162.85143432617187,
+    "speedup_factor": 26.989846234783816,
+    "max_abs_error": 4096.0,
+    "max_rel_error": 215.2039031982422,
+    "matched_ratio": 0.9947972978864398
+  },
+  "dc8409e4-8350-5a56-be04-537d22f1b150": {
+    "status": "PASSED",
+    "latency_ms": 6.034619180361429,
+    "reference_latency_ms": 177.64624938964843,
+    "speedup_factor": 29.43785582489875,
+    "max_abs_error": 4096.0,
+    "max_rel_error": 6878.96484375,
+    "matched_ratio": 0.9940408979143415
+  },
+  "3dd7810a-1d14-5b0d-ae5d-cf03fe08cb6b": {
+    "status": "PASSED",
+    "latency_ms": 10.176011196772258,
+    "reference_latency_ms": 192.8230189005534,
+    "speedup_factor": 18.94878210842724,
+    "max_abs_error": 4096.0,
+    "max_rel_error": 12450.130859375,
+    "matched_ratio": 0.9941377639770508
+  },
+  "653b86c0-b5ef-5638-8c59-0aea3bb8b6d1": {
+    "status": "PASSED",
+    "latency_ms": 16.097558991114298,
+    "reference_latency_ms": 214.0815862019857,
+    "speedup_factor": 13.299009267191176,
+    "max_abs_error": 4096.0,
+    "max_rel_error": 2384.98779296875,
+    "matched_ratio": 0.9949901785169329
+  }
+}

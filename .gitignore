@@ -215,3 +215,13 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Project: local test files and generated data
+agent_runs_smoke/
+transfer_dataset/
+transfer_ref_latency.json
+test_bench.json
+fib_bench.zip
+results_bundle.zip
+agent_loop/agent_runs/
+agent_loop/run_config_smoke.toml

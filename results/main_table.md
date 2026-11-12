@@ -1,6 +1,6 @@
 # Results: Claude tiers on the FlashInfer MoE kernel (RTX 5060 Laptop GPU)
 
-Speedup = patched PyTorch reference latency / kernel latency, mean over all 19 workloads, full benchmark (3 warmup, 100 iterations, 5 trials). A run's speedup counts only if its best kernel passes all 19 workloads. Identical code measured 1.00-1.03x, so differences under ~3% are noise. Cost is Claude Code's API-equivalent estimate; runs used a subscription and were not billed. Non-ML baselines: handwritten = hand-written Triton kernel with a default config; random = random search over its tile settings; autotune = Triton autotune over a curated config list; both searches get the same number of timed candidates as a Claude run.
+Speedup = patched PyTorch reference latency / kernel latency, mean over all 19 workloads, full benchmark (3 warmup, 100 iterations, 5 trials). A run's speedup counts only if its best kernel passes all 19 workloads. Identical code measured 1.00-1.03x, so differences under ~3% are noise. Cost is Claude Code's API-equivalent estimate; runs used a subscription and were not billed. Non-ML baselines: handwritten = hand-written Triton kernel with a default config; random = random search over its tile settings; autotune = Triton autotune over a curated config list; both searches get the same number of timed candidates as a Claude run. autotune_fp8 = ablation: autotune with FP8 tensor-core dots in GEMM1, the design choice all Sonnet/Opus kernels made.
 
 ## Per tier
 
@@ -12,6 +12,7 @@ Speedup = patched PyTorch reference latency / kernel latency, mean over all 19 w
 | handwritten (non-ML) | 3 | 1 | 3 | 8.02x (8.02-8.05) | 1 | $0.00 | 0.0 | 1.2 |
 | random (non-ML) | 3 | 15 | 3 | 11.18x (9.88-11.33) | 1 | $0.00 | 0.0 | 66.3 |
 | autotune (non-ML) | 3 | 15 | 3 | 11.51x (11.48-11.84) | 1 | $0.00 | 0.0 | 2.3 |
+| autotune_fp8 (non-ML) | 3 | 15 | 3 | 12.19x (12.01-12.35) | 1 | $0.00 | 0.0 | 1.9 |
 
 ## Per run
 
@@ -35,3 +36,6 @@ Speedup = patched PyTorch reference latency / kernel latency, mean over all 19 w
 | autotune | 1 | - | 1 | 1 | 11.68x | 11.514x | CORRECT | 0/0 | 0.00 | 0.00 | 0.0 | 3.9 |
 | autotune | 2 | - | 1 | 1 | 12.05x | 11.480x | CORRECT | 0/0 | 0.00 | 0.00 | 0.0 | 2.3 |
 | autotune | 3 | - | 1 | 1 | 12.04x | 11.835x | CORRECT | 0/0 | 0.00 | 0.00 | 0.0 | 1.9 |
+| autotune_fp8 | 1 | - | 1 | 1 | 12.82x | 12.195x | CORRECT | 0/0 | 0.00 | 0.00 | 0.0 | 3.5 |
+| autotune_fp8 | 2 | - | 1 | 1 | 12.80x | 12.008x | CORRECT | 0/0 | 0.00 | 0.00 | 0.0 | 1.9 |
+| autotune_fp8 | 3 | - | 1 | 1 | 12.72x | 12.354x | CORRECT | 0/0 | 0.00 | 0.00 | 0.0 | 1.9 |

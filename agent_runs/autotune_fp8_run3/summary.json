@@ -1,0 +1,27 @@
+{
+  "tier": "autotune_fp8",
+  "model": "none (non-ML baseline)",
+  "run_id": "3",
+  "fake": false,
+  "attempts_made": 1,
+  "stop_reason": "budget",
+  "budget": 15,
+  "timed_candidates": 15,
+  "skipped_infeasible": 0,
+  "iterations_to_first_correct": 1,
+  "best_mean_speedup": 12.718892967069474,
+  "best_attempt": 1,
+  "total_input_tokens": 0,
+  "total_output_tokens": 0,
+  "total_cost_usd": 0.0,
+  "model_ids_used": [],
+  "total_llm_seconds": 0.0,
+  "total_bench_seconds": 113.7,
+  "bench_settings": {
+    "warmup_runs": 3,
+    "iterations": 20,
+    "num_trials": 3,
+    "ref_cache": "ref_latency.json",
+    "stop_on_fail": true
+  }
+}

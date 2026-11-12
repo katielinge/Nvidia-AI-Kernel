@@ -16,13 +16,15 @@ Design (standard grouped-GEMM MoE, no tricks):
        weight, added into the fp32 output rows of those tokens.
   4. Output cast to bfloat16.
 Weights stay in FP8 in memory; they are dequantized per tile inside the kernels.
+FP8_DOT=True (ablation): GEMM1 multiplies the FP8 values directly on the FP8 tensor cores
+instead of converting them to bf16 first; the block scales are applied the same way.
 """
 import torch
 import triton
 import triton.language as tl
 
 # ---- tunable settings (baseline_search.py rewrites these three lines) ----
-CFG1 = dict(BLOCK_M=32, BLOCK_N=64, BLOCK_K=128, num_warps=4, num_stages=3)
+CFG1 = dict(BLOCK_M=32, BLOCK_N=64, BLOCK_K=128, num_warps=4, num_stages=3, FP8_DOT=False)
 CFG2 = dict(BLOCK_M=32, BLOCK_N=64, BLOCK_K=128, num_warps=4, num_stages=3, PREC="tf32x3")
 AUTOTUNE = None  # or a list of configs: [dict(BLOCK_M=.., BLOCK_N=.., BLOCK_K=.., num_warps=.., num_stages=..), ...]
 
@@ -34,7 +36,8 @@ BLOCK = 128
 @triton.jit
 def _gemm1_swiglu(A, AS, TOK, W, WS, C, Tk, T, TK_BUCKET,
                   H: tl.constexpr, I: tl.constexpr, NKB: tl.constexpr,
-                  BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr):
+                  BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, BLOCK_K: tl.constexpr,
+                  FP8_DOT: tl.constexpr):
     pid_m = tl.program_id(0)
     pid_n = tl.program_id(1)
     offs_m = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
@@ -48,10 +51,14 @@ def _gemm1_swiglu(A, AS, TOK, W, WS, C, Tk, T, TK_BUCKET,
     acc2 = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
     for k0 in range(0, H, BLOCK_K):
         kb = k0 // 128
-        a = tl.load(A + tok[:, None] * H + (k0 + offs_k)[None, :]).to(tl.bfloat16)
+        a = tl.load(A + tok[:, None] * H + (k0 + offs_k)[None, :])
         a_s = tl.load(AS + kb * T + tok)
-        w1 = tl.load(W + offs_n[:, None] * H + (k0 + offs_k)[None, :]).to(tl.bfloat16)
-        w2 = tl.load(W + (offs_n + I)[:, None] * H + (k0 + offs_k)[None, :]).to(tl.bfloat16)
+        w1 = tl.load(W + offs_n[:, None] * H + (k0 + offs_k)[None, :])
+        w2 = tl.load(W + (offs_n + I)[:, None] * H + (k0 + offs_k)[None, :])
+        if not FP8_DOT:                  # default: convert FP8 -> bf16 (exact) for the dot
+            a = a.to(tl.bfloat16)
+            w1 = w1.to(tl.bfloat16)
+            w2 = w2.to(tl.bfloat16)
         s1 = tl.load(WS + nb1 * NKB + kb)
         s2 = tl.load(WS + nb2 * NKB + kb)
         acc1 += tl.dot(a, tl.trans(w1)) * (a_s[:, None] * s1)
@@ -98,7 +105,8 @@ def _configs(lst, extra=None):
 
 
 if AUTOTUNE:
-    _g1 = triton.autotune(configs=_configs(AUTOTUNE), key=["TK_BUCKET"])(_gemm1_swiglu)
+    _g1 = triton.autotune(configs=_configs(AUTOTUNE, {"FP8_DOT": CFG1.get("FP8_DOT", False)}),
+                          key=["TK_BUCKET"])(_gemm1_swiglu)
     _g2 = triton.autotune(configs=_configs(AUTOTUNE, {"PREC": CFG2["PREC"]}), key=["TK_BUCKET"],
                           restore_value=["OUT"])(_gemm2_scatter)
 else:
@@ -187,6 +195,7 @@ def kernel(
                 hs, hs_scale, tok, gemm1_weights[le], s13[le], C, n, T, bucket,
                 H=H, I=I, NKB=H // BLOCK,
                 BLOCK_M=c1["BLOCK_M"], BLOCK_N=c1["BLOCK_N"], BLOCK_K=c1["BLOCK_K"],
+                FP8_DOT=c1.get("FP8_DOT", False),
                 num_warps=c1["num_warps"], num_stages=c1["num_stages"])
             _g2[(triton.cdiv(n, c2["BLOCK_M"]), H // c2["BLOCK_N"])](
                 C, gemm2_weights[le], s2[le], tok, wt, out, n, bucket,
