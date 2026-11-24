@@ -18,6 +18,9 @@ Design (standard grouped-GEMM MoE, no tricks):
 Weights stay in FP8 in memory; they are dequantized per tile inside the kernels.
 FP8_DOT=True (ablation): GEMM1 multiplies the FP8 values directly on the FP8 tensor cores
 instead of converting them to bf16 first; the block scales are applied the same way.
+PREC="bf16x2" (ablation, the agents' GEMM2 idea): the fp32 activations are split into a bf16
+high part and a bf16 low part, and GEMM2 is two bf16 tensor-core dots (hi*W + lo*W) instead of
+one fp32 dot at tf32x3/tf32/ieee precision. The FP8 weights convert to bf16 exactly.
 """
 import torch
 import triton
@@ -84,9 +87,16 @@ def _gemm2_scatter(C, W, WS, TOK, WTOK, OUT, Tk, TK_BUCKET,
     for k0 in range(0, I, BLOCK_K):
         kb = k0 // 128
         a = tl.load(C + offs_m[:, None] * I + (k0 + offs_k)[None, :], mask=mask_m[:, None], other=0.0)
-        w = tl.load(W + offs_n[:, None] * I + (k0 + offs_k)[None, :]).to(tl.float32)
         s = tl.load(WS + nb * NKB2 + kb)
-        acc += tl.dot(a, tl.trans(w), input_precision=PREC) * s
+        if PREC == "bf16x2":
+            wb = tl.load(W + offs_n[:, None] * I + (k0 + offs_k)[None, :]).to(tl.bfloat16)
+            a_hi = a.to(tl.bfloat16)
+            a_lo = (a - a_hi.to(tl.float32)).to(tl.bfloat16)
+            d = tl.dot(a_hi, tl.trans(wb)) + tl.dot(a_lo, tl.trans(wb))
+        else:
+            w = tl.load(W + offs_n[:, None] * I + (k0 + offs_k)[None, :]).to(tl.float32)
+            d = tl.dot(a, tl.trans(w), input_precision=PREC)
+        acc += d * s
     wt = tl.load(WTOK + offs_m, mask=mask_m, other=0.0)
     acc = acc * wt[:, None]
     ptr = OUT + tok[:, None] * H + offs_n[None, :]

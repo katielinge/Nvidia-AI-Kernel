@@ -1,6 +1,6 @@
 # Results: Claude tiers on the FlashInfer MoE kernel (RTX 5060 Laptop GPU)
 
-Speedup = patched PyTorch reference latency / kernel latency, mean over all 19 workloads, full benchmark (3 warmup, 100 iterations, 5 trials). A run's speedup counts only if its best kernel passes all 19 workloads. Identical code measured 1.00-1.03x, so differences under ~3% are noise. Cost is Claude Code's API-equivalent estimate; runs used a subscription and were not billed. Non-ML baselines: handwritten = hand-written Triton kernel with a default config; random = random search over its tile settings; autotune = Triton autotune over a curated config list; both searches get the same number of timed candidates as a Claude run. autotune_fp8 = ablation: autotune with FP8 tensor-core dots in GEMM1, the design choice all Sonnet/Opus kernels made.
+Speedup = patched PyTorch reference latency / kernel latency, mean over all 19 workloads, full benchmark (3 warmup, 100 iterations, 5 trials). A run's speedup counts only if its best kernel passes all 19 workloads. Identical code measured 1.00-1.03x, so differences under ~3% are noise. Cost is Claude Code's API-equivalent estimate; runs used a subscription and were not billed. Non-ML baselines: handwritten = hand-written Triton kernel with a default config; random = random search over its tile settings; autotune = Triton autotune over a curated config list; both searches get the same number of timed candidates as a Claude run. autotune_fp8 = ablation: autotune with FP8 tensor-core dots in GEMM1, the design choice all Sonnet/Opus kernels made. autotune_agent = autotune given both design changes the knock-out ablation found (FP8 GEMM1 + bf16 hi/lo split GEMM2), same configs and budget.
 
 ## Per tier
 
@@ -13,6 +13,7 @@ Speedup = patched PyTorch reference latency / kernel latency, mean over all 19 w
 | random (non-ML) | 3 | 15 | 3 | 11.18x (9.88-11.33) | 1 | $0.00 | 0.0 | 66.3 |
 | autotune (non-ML) | 3 | 15 | 3 | 11.51x (11.48-11.84) | 1 | $0.00 | 0.0 | 2.3 |
 | autotune_fp8 (non-ML) | 3 | 15 | 3 | 12.19x (12.01-12.35) | 1 | $0.00 | 0.0 | 1.9 |
+| autotune_agent (non-ML) | 3 | 15 | 3 | 17.01x (16.93-17.04) | 1 | $0.00 | 0.0 | 1.7 |
 
 ## Per run
 
@@ -39,3 +40,6 @@ Speedup = patched PyTorch reference latency / kernel latency, mean over all 19 w
 | autotune_fp8 | 1 | - | 1 | 1 | 12.82x | 12.195x | CORRECT | 0/0 | 0.00 | 0.00 | 0.0 | 3.5 |
 | autotune_fp8 | 2 | - | 1 | 1 | 12.80x | 12.008x | CORRECT | 0/0 | 0.00 | 0.00 | 0.0 | 1.9 |
 | autotune_fp8 | 3 | - | 1 | 1 | 12.72x | 12.354x | CORRECT | 0/0 | 0.00 | 0.00 | 0.0 | 1.9 |
+| autotune_agent | 1 | - | 1 | 1 | 17.74x | 17.013x | CORRECT | 0/0 | 0.00 | 0.00 | 0.0 | 2.8 |
+| autotune_agent | 2 | - | 1 | 1 | 18.00x | 16.931x | CORRECT | 0/0 | 0.00 | 0.00 | 0.0 | 1.7 |
+| autotune_agent | 3 | - | 1 | 1 | 17.64x | 17.036x | CORRECT | 0/0 | 0.00 | 0.00 | 0.0 | 1.6 |

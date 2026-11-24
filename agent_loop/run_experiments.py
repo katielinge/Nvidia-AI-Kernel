@@ -38,7 +38,7 @@ sys.path.insert(0, str(HERE))
 import prompts  # noqa: E402
 from bench import RealBench  # noqa: E402
 
-BASELINES = ("handwritten", "random", "autotune", "autotune_fp8")   # non-ML baselines (baseline_search.py)
+BASELINES = ("handwritten", "random", "autotune", "autotune_fp8", "autotune_agent")   # non-ML baselines (baseline_search.py)
 FULL_BENCH = {"warmup_runs": 3, "iterations": 100, "num_trials": 5, "stop_on_fail": False}
 
 
@@ -179,7 +179,8 @@ def build_table(cfg, tiers, n_runs):
           "Non-ML baselines: handwritten = hand-written Triton kernel with a default config; random = random search "
           "over its tile settings; autotune = Triton autotune over a curated config list; both searches get the same "
           "number of timed candidates as a Claude run. autotune_fp8 = ablation: autotune with FP8 tensor-core "
-          "dots in GEMM1, the design choice all Sonnet/Opus kernels made.", "",
+          "dots in GEMM1, the design choice all Sonnet/Opus kernels made. autotune_agent = autotune given both "
+          "design changes the knock-out ablation found (FP8 GEMM1 + bf16 hi/lo split GEMM2), same configs and budget.", "",
           "## Per tier", "",
           "| Method | Runs | Timed candidates per run | Runs with a correct kernel | Final speedup, median (min-max) | First correct attempt, median | API-equiv. cost per run, median | Model time per run, median (min) | Benchmark time per run, median (min) |",
           "|---|---|---|---|---|---|---|---|---|"]

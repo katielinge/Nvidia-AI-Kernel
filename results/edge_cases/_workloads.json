@@ -1,0 +1,68 @@
+{
+  "6bac3eca": {
+    "case": "hot_8_experts",
+    "tokens": 256,
+    "offset": 0,
+    "note": "8 of 32 local experts get every token"
+  },
+  "323dba9e": {
+    "case": "skewed_75pct",
+    "tokens": 1024,
+    "offset": 64,
+    "note": "75% of tokens on 8 local experts"
+  },
+  "be67646b": {
+    "case": "one_token_each",
+    "tokens": 32,
+    "offset": 0,
+    "note": "every local expert gets exactly 1 token"
+  },
+  "089ff7f2": {
+    "case": "no_local_tokens",
+    "tokens": 64,
+    "offset": 0,
+    "note": "correct output is all zeros"
+  },
+  "f6ca2991": {
+    "case": "odd_17",
+    "tokens": 17,
+    "offset": 32,
+    "note": "random routing, real bias"
+  },
+  "8dc40f0b": {
+    "case": "odd_129",
+    "tokens": 129,
+    "offset": 96,
+    "note": "random routing, real bias"
+  },
+  "bbfbcced": {
+    "case": "odd_1000",
+    "tokens": 1000,
+    "offset": 160,
+    "note": "random routing, real bias"
+  },
+  "1b1c1fc4": {
+    "case": "odd_4097",
+    "tokens": 4097,
+    "offset": 224,
+    "note": "random routing, real bias"
+  },
+  "ab7f5a2a": {
+    "case": "scale_large",
+    "tokens": 64,
+    "offset": 0,
+    "note": "activation scales all 100"
+  },
+  "eb877a93": {
+    "case": "scale_small",
+    "tokens": 64,
+    "offset": 0,
+    "note": "activation scales all 0.01"
+  },
+  "6b8b7431": {
+    "case": "scale_mixed",
+    "tokens": 64,
+    "offset": 0,
+    "note": "scales log-uniform 1e-3..1e3"
+  }
+}

@@ -1,0 +1,255 @@
+{
+  "method": "opus",
+  "run": 1,
+  "final_speedup": 20.174818075420227,
+  "by_tokens": {
+    "7": {
+      "wall_ms": 2.6132199999665318,
+      "gpu_busy_ms": 1.6852478999999942,
+      "launches": 74.0,
+      "breakdown_ms": {
+        "Routing / setup": 0.0888167999999944,
+        "GEMM1": 1.0559237,
+        "GEMM2": 0.5405073999999999,
+        "Library GEMM": 0.0,
+        "Idle (launch overhead)": 0.9279720999665375
+      },
+      "top_kernels": [
+        {
+          "name": "_gemm1_kernel",
+          "category": "GEMM1",
+          "launches": 1.0,
+          "gpu_ms": 1.0559237
+        },
+        {
+          "name": "_gemm2_kernel",
+          "category": "GEMM2",
+          "launches": 1.0,
+          "gpu_ms": 0.5405073999999999
+        },
+        {
+          "name": "_ZN2at6native6sbtopk10gatherTopKIfjLi2ELb0EEEvNS_4cuda6detail10TensorInfoIKT_T0_EES8_S8_bS8_S8_NS5_IS6_S8_EES8_NS5_IxS8_",
+          "category": "Routing / setup",
+          "launches": 3.0,
+          "gpu_ms": 0.013023899999999774
+        },
+        {
+          "name": "_ZN2at6native24index_elementwise_kernelILi128ELi4EZNS0_16gpu_index_kernelIZNS0_17index_kernel_implINS0_10OpaqueTypeILi8E",
+          "category": "Routing / setup",
+          "launches": 4.0,
+          "gpu_ms": 0.005458899999999767
+        },
+        {
+          "name": "_ZN2at6native29vectorized_elementwise_kernelILi2ENS0_15CUDAFunctor_addIxEESt5arrayIPcLy3EELb0EEEviT0_T1_",
+          "category": "Routing / setup",
+          "launches": 5.0,
+          "gpu_ms": 0.0048957999999993266
+        },
+        {
+          "name": "_ZN2at6native27unrolled_elementwise_kernelIZZZNS0_23direct_copy_kernel_cudaERNS_18TensorIteratorBaseEENKUlvE1_clEvENKUlv",
+          "category": "Routing / setup",
+          "launches": 4.0,
+          "gpu_ms": 0.003689500000000225
+        },
+        {
+          "name": "_ZN2at6native29vectorized_elementwise_kernelILi2ENS0_11FillFunctorIxEESt5arrayIPcLy1EELb0EEEviT0_T1_",
+          "category": "Routing / setup",
+          "launches": 5.0,
+          "gpu_ms": 0.0036031999999990147
+        },
+        {
+          "name": "_ZN2at6native29vectorized_elementwise_kernelILi2EZZZNS0_49_GLOBAL__N__a62a4dcd_16_TensorCompare_cu_71e06f4e17where_kerne",
+          "category": "Routing / setup",
+          "launches": 3.0,
+          "gpu_ms": 0.0033666000000009714
+        }
+      ]
+    },
+    "64": {
+      "wall_ms": 5.7303000000501925,
+      "gpu_busy_ms": 4.394554500000002,
+      "launches": 74.0,
+      "breakdown_ms": {
+        "Routing / setup": 0.1229585000000014,
+        "GEMM1": 2.8262456,
+        "GEMM2": 1.4453504,
+        "Library GEMM": 0.0,
+        "Idle (launch overhead)": 1.3357455000501908
+      },
+      "top_kernels": [
+        {
+          "name": "_gemm1_kernel",
+          "category": "GEMM1",
+          "launches": 1.0,
+          "gpu_ms": 2.8262456
+        },
+        {
+          "name": "_gemm2_kernel",
+          "category": "GEMM2",
+          "launches": 1.0,
+          "gpu_ms": 1.4453504
+        },
+        {
+          "name": "_ZN2at6native18radixSortKVInPlaceILin2ELin1ELi32ELi32ExxjEEvNS_4cuda6detail10TensorInfoIT3_T5_EES6_S6_S6_NS4_IT4_S6_EES6",
+          "category": "Routing / setup",
+          "launches": 1.0,
+          "gpu_ms": 0.019013699999999835
+        },
+        {
+          "name": "_ZN2at6native6sbtopk10gatherTopKIfjLi2ELb0EEEvNS_4cuda6detail10TensorInfoIKT_T0_EES8_S8_bS8_S8_NS5_IS6_S8_EES8_NS5_IxS8_",
+          "category": "Routing / setup",
+          "launches": 3.0,
+          "gpu_ms": 0.015842699999999512
+        },
+        {
+          "name": "_ZN2at6native29vectorized_elementwise_kernelILi4EZNS0_25bfloat16_copy_kernel_cudaERNS_18TensorIteratorBaseEEUlfE_St5arra",
+          "category": "Routing / setup",
+          "launches": 1.0,
+          "gpu_ms": 0.006790200000000186
+        },
+        {
+          "name": "_ZN2at6native24index_elementwise_kernelILi128ELi4EZNS0_16gpu_index_kernelIZNS0_17index_kernel_implINS0_10OpaqueTypeILi8E",
+          "category": "Routing / setup",
+          "launches": 4.0,
+          "gpu_ms": 0.005513599999999951
+        },
+        {
+          "name": "_ZN2at6native24index_elementwise_kernelILi128ELi4EZNS0_16gpu_index_kernelIZNS0_17index_kernel_implINS0_10OpaqueTypeILi4E",
+          "category": "Routing / setup",
+          "launches": 1.0,
+          "gpu_ms": 0.005465500000000202
+        },
+        {
+          "name": "_ZN2at6native29vectorized_elementwise_kernelILi2ENS0_15CUDAFunctor_addIxEESt5arrayIPcLy3EELb0EEEviT0_T1_",
+          "category": "Routing / setup",
+          "launches": 5.0,
+          "gpu_ms": 0.005078299999999217
+        }
+      ]
+    },
+    "1024": {
+      "wall_ms": 6.9673799999691255,
+      "gpu_busy_ms": 5.9911262000000125,
+      "launches": 91.0,
+      "breakdown_ms": {
+        "Routing / setup": 0.5275641000000106,
+        "GEMM1": 3.079781300000001,
+        "GEMM2": 2.3837808000000007,
+        "Library GEMM": 0.0,
+        "Idle (launch overhead)": 0.976253799969113
+      },
+      "top_kernels": [
+        {
+          "name": "_gemm1_kernel",
+          "category": "GEMM1",
+          "launches": 1.0,
+          "gpu_ms": 3.079781300000001
+        },
+        {
+          "name": "_gemm2_kernel",
+          "category": "GEMM2",
+          "launches": 1.0,
+          "gpu_ms": 2.3837808000000007
+        },
+        {
+          "name": "_ZN2at6native6sbtopk10gatherTopKIfjLi2ELb0EEEvNS_4cuda6detail10TensorInfoIKT_T0_EES8_S8_bS8_S8_NS5_IS6_S8_EES8_NS5_IxS8_",
+          "category": "Routing / setup",
+          "launches": 3.0,
+          "gpu_ms": 0.1644273999999988
+        },
+        {
+          "name": "_ZN2at6native29vectorized_elementwise_kernelILi4EZNS0_25bfloat16_copy_kernel_cudaERNS_18TensorIteratorBaseEEUlfE_St5arra",
+          "category": "Routing / setup",
+          "launches": 1.0,
+          "gpu_ms": 0.08749840000000077
+        },
+        {
+          "name": "_ZN2at6native29vectorized_elementwise_kernelILi4ENS0_11FillFunctorIfEESt5arrayIPcLy1EELb0EEEviT0_T1_",
+          "category": "Routing / setup",
+          "launches": 3.0,
+          "gpu_ms": 0.05893240000000205
+        },
+        {
+          "name": "_ZN14at_cuda_detail3cub6detail10radix_sort29DeviceRadixSortOnesweepKernelINS1_5radix10policy_hubIxN2at4cuda3cub6detail10",
+          "category": "Routing / setup",
+          "launches": 8.0,
+          "gpu_ms": 0.05840749999999926
+        },
+        {
+          "name": "_ZN2at6native24index_elementwise_kernelILi128ELi4EZNS0_16gpu_index_kernelIZNS0_17index_kernel_implINS0_10OpaqueTypeILi8E",
+          "category": "Routing / setup",
+          "launches": 4.0,
+          "gpu_ms": 0.011276600000000143
+        },
+        {
+          "name": "Memset (Device)",
+          "category": "Routing / setup",
+          "launches": 10.0,
+          "gpu_ms": 0.008489299999997275
+        }
+      ]
+    },
+    "8192": {
+      "wall_ms": 35.1343666664737,
+      "gpu_busy_ms": 34.45292100000001,
+      "launches": 91.0,
+      "breakdown_ms": {
+        "Routing / setup": 3.684662666666677,
+        "GEMM1": 15.42418666666667,
+        "GEMM2": 15.344071666666665,
+        "Library GEMM": 0.0,
+        "Idle (launch overhead)": 0.6814456664736923
+      },
+      "top_kernels": [
+        {
+          "name": "_gemm1_kernel",
+          "category": "GEMM1",
+          "launches": 1.0,
+          "gpu_ms": 15.42418666666667
+        },
+        {
+          "name": "_gemm2_kernel",
+          "category": "GEMM2",
+          "launches": 1.0,
+          "gpu_ms": 15.344071666666665
+        },
+        {
+          "name": "_ZN2at6native29vectorized_elementwise_kernelILi4EZNS0_25bfloat16_copy_kernel_cudaERNS_18TensorIteratorBaseEEUlfE_St5arra",
+          "category": "Routing / setup",
+          "launches": 1.0,
+          "gpu_ms": 1.237582333333332
+        },
+        {
+          "name": "_ZN2at6native6sbtopk10gatherTopKIfjLi2ELb0EEEvNS_4cuda6detail10TensorInfoIKT_T0_EES8_S8_bS8_S8_NS5_IS6_S8_EES8_NS5_IxS8_",
+          "category": "Routing / setup",
+          "launches": 3.0,
+          "gpu_ms": 1.0977363333333343
+        },
+        {
+          "name": "_ZN2at6native29vectorized_elementwise_kernelILi4ENS0_11FillFunctorIfEESt5arrayIPcLy1EELb0EEEviT0_T1_",
+          "category": "Routing / setup",
+          "launches": 3.0,
+          "gpu_ms": 0.8090520000000091
+        },
+        {
+          "name": "_ZN14at_cuda_detail3cub6detail10radix_sort29DeviceRadixSortOnesweepKernelINS1_5radix10policy_hubIxN2at4cuda3cub6detail10",
+          "category": "Routing / setup",
+          "launches": 8.0,
+          "gpu_ms": 0.05235133333333336
+        },
+        {
+          "name": "_ZN2at6native29vectorized_elementwise_kernelILi4EZZZNS0_15neg_kernel_cudaERNS_18TensorIteratorBaseEENKUlvE0_clEvENKUlvE5",
+          "category": "Routing / setup",
+          "launches": 1.0,
+          "gpu_ms": 0.04613200000000067
+        },
+        {
+          "name": "_ZN2at6native34_scatter_gather_elementwise_kernelILi128ELi8EZNS0_36_cuda_scatter_gather_internal_kernelILb1ExxEclINS0_9R",
+          "category": "Routing / setup",
+          "launches": 1.0,
+          "gpu_ms": 0.04401933333333636
+        }
+      ]
+    }
+  }
+}

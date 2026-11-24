@@ -11,6 +11,10 @@ budget of timed candidates as a Claude run (run.max_iterations in run_config.tom
                token-count bucket: 1 benchmarked kernel that times `budget` configs internally
   autotune_fp8 ablation: same as autotune, but GEMM1 uses FP8 tensor-core dots (the one design
                choice every Sonnet/Opus best kernel made and the baselines lacked)
+  autotune_agent  "give the autotuner the agents' ideas": same as autotune (same 15 configs, same
+               budget), but with BOTH design changes the knock-out ablation found: FP8 dots in
+               GEMM1 and the bf16 hi/lo split in GEMM2. Tests whether the agents' value was
+               proposing the search space rather than searching it.
 
 Output goes in agent_runs/<method>_run<k>/ in the same format as a Claude run (log.jsonl,
 attempt kernels, best_kernel.py, summary.json), so run_experiments.py handles the final
@@ -36,7 +40,7 @@ sys.path.insert(0, str(HERE))
 import prompts  # noqa: E402
 from bench import FakeBench, RealBench  # noqa: E402
 
-METHODS = ("handwritten", "random", "autotune", "autotune_fp8")
+METHODS = ("handwritten", "random", "autotune", "autotune_fp8", "autotune_agent")
 
 # Search space. BLOCK_N and BLOCK_K must divide 128 (one scale per tile); BLOCK_M >= 16 for tl.dot.
 SPACE = {
@@ -146,6 +150,9 @@ def candidates(method: str, budget: int, run_id: int):
     elif method == "autotune_fp8":
         yield f"autotune over {min(budget, len(AUTOTUNE_POOL))} configs, FP8 dot", \
             dict(DEFAULT1, FP8_DOT=True), DEFAULT2, AUTOTUNE_POOL[:budget]
+    elif method == "autotune_agent":
+        yield f"autotune over {min(budget, len(AUTOTUNE_POOL))} configs, FP8 dot + bf16x2 GEMM2", \
+            dict(DEFAULT1, FP8_DOT=True), dict(DEFAULT2, PREC="bf16x2"), AUTOTUNE_POOL[:budget]
     else:
         raise SystemExit(f"unknown method {method}")
 

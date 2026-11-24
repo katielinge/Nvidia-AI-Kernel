@@ -2,27 +2,27 @@
 
 Speedup = patched PyTorch reference latency / kernel latency, full benchmark (5 trials x 100 iterations). Each cell is the median of 3 runs.
 
-| Tokens | Workload | Reference ms | Haiku | Hand-written (untuned) | Random search | Triton autotune | Sonnet | Opus | Autotune + FP8 dot (ablation) |
-|---|---|---|---|---|---|---|---|---|---|
-| 1 | e05c6c03 | 19.1 | 1.49x | 6.14x | 7.19x | 7.39x | 8.82x | 10.57x | 7.53x |
-| 7 | b8f4f012 | 38.5 | 1.57x | 7.22x | 9.03x | 9.94x | 13.10x | 16.15x | 10.89x |
-| 14 | 8cba5890 | 61.7 | 1.48x | 8.54x | 11.44x | 12.44x | 17.39x | 19.08x | 13.21x |
-| 15 | 2e69caee | 29.2 | 1.50x | 7.40x | 8.89x | 9.50x | 12.39x | 13.32x | 10.21x |
-| 16 | a7c2bcfd | 67.6 | 1.47x | 8.78x | 11.93x | 12.94x | 19.48x | 20.56x | 13.16x |
-| 32 | 6230e838 | 108.5 | 1.45x | 9.36x | 12.49x | 13.83x | 21.66x | 24.25x | 14.75x |
-| 52 | f7d6ac7c | 71.2 | 1.20x | 7.56x | 10.41x | 11.04x | 17.18x | 18.91x | 11.65x |
-| 53 | fc378037 | 114.2 | 1.40x | 9.03x | 12.80x | 13.63x | 21.42x | 24.11x | 14.17x |
-| 54 | 76010cb4 | 118.6 | 1.51x | 9.76x | 13.76x | 14.76x | 22.50x | 25.51x | 15.26x |
-| 55 | 81955b1e | 121.9 | 1.48x | 9.57x | 13.62x | 14.51x | 22.36x | 25.41x | 15.39x |
-| 56 | 4822167c | 131.9 | 1.48x | 9.70x | 13.84x | 14.59x | 22.74x | 25.60x | 15.37x |
-| 57 | 74d7ff04 | 126.5 | 1.47x | 9.56x | 13.87x | 14.70x | 22.78x | 25.19x | 15.24x |
-| 58 | e626d3e6 | 130.9 | 1.46x | 9.43x | 13.81x | 14.51x | 23.08x | 25.47x | 14.90x |
-| 59 | eedc63b2 | 95.7 | 1.45x | 9.22x | 12.83x | 13.54x | 21.00x | 22.74x | 14.46x |
-| 62 | 5eadab1e | 91.8 | 1.44x | 9.14x | 12.65x | 13.37x | 21.22x | 22.81x | 14.31x |
-| 80 | 8f1ff9f1 | 138.9 | 1.44x | 9.24x | 13.32x | 14.25x | 23.02x | 25.62x | 14.78x |
-| 901 | 1a4c6ba1 | 195.8 | 1.39x | 7.75x | 10.80x | 9.06x | 12.81x | 23.27x | 10.58x |
-| 11948 | 58a34f27 | 357.3 | 1.30x | 2.73x | 3.93x | 2.91x | 4.45x | 8.42x | 3.27x |
-| 14107 | 5e8dc11c | 461.1 | 1.27x | 2.37x | 3.44x | 2.58x | 4.01x | 7.50x | 2.98x |
+| Tokens | Workload | Reference ms | Haiku | Hand-written (untuned) | Random search | Triton autotune | Sonnet | Opus | Autotune + FP8 dot (ablation) | Autotune + agents' ideas (ablation) |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | e05c6c03 | 19.1 | 1.49x | 6.14x | 7.19x | 7.39x | 8.82x | 10.57x | 7.53x | 9.21x |
+| 7 | b8f4f012 | 38.5 | 1.57x | 7.22x | 9.03x | 9.94x | 13.10x | 16.15x | 10.89x | 13.96x |
+| 14 | 8cba5890 | 61.7 | 1.48x | 8.54x | 11.44x | 12.44x | 17.39x | 19.08x | 13.21x | 17.16x |
+| 15 | 2e69caee | 29.2 | 1.50x | 7.40x | 8.89x | 9.50x | 12.39x | 13.32x | 10.21x | 11.34x |
+| 16 | a7c2bcfd | 67.6 | 1.47x | 8.78x | 11.93x | 12.94x | 19.48x | 20.56x | 13.16x | 17.61x |
+| 32 | 6230e838 | 108.5 | 1.45x | 9.36x | 12.49x | 13.83x | 21.66x | 24.25x | 14.75x | 20.33x |
+| 52 | f7d6ac7c | 71.2 | 1.20x | 7.56x | 10.41x | 11.04x | 17.18x | 18.91x | 11.65x | 15.55x |
+| 53 | fc378037 | 114.2 | 1.40x | 9.03x | 12.80x | 13.63x | 21.42x | 24.11x | 14.17x | 20.19x |
+| 54 | 76010cb4 | 118.6 | 1.51x | 9.76x | 13.76x | 14.76x | 22.50x | 25.51x | 15.26x | 21.91x |
+| 55 | 81955b1e | 121.9 | 1.48x | 9.57x | 13.62x | 14.51x | 22.36x | 25.41x | 15.39x | 21.75x |
+| 56 | 4822167c | 131.9 | 1.48x | 9.70x | 13.84x | 14.59x | 22.74x | 25.60x | 15.37x | 22.11x |
+| 57 | 74d7ff04 | 126.5 | 1.47x | 9.56x | 13.87x | 14.70x | 22.78x | 25.19x | 15.24x | 21.36x |
+| 58 | e626d3e6 | 130.9 | 1.46x | 9.43x | 13.81x | 14.51x | 23.08x | 25.47x | 14.90x | 21.63x |
+| 59 | eedc63b2 | 95.7 | 1.45x | 9.22x | 12.83x | 13.54x | 21.00x | 22.74x | 14.46x | 19.66x |
+| 62 | 5eadab1e | 91.8 | 1.44x | 9.14x | 12.65x | 13.37x | 21.22x | 22.81x | 14.31x | 19.85x |
+| 80 | 8f1ff9f1 | 138.9 | 1.44x | 9.24x | 13.32x | 14.25x | 23.02x | 25.62x | 14.78x | 21.76x |
+| 901 | 1a4c6ba1 | 195.8 | 1.39x | 7.75x | 10.80x | 9.06x | 12.81x | 23.27x | 10.58x | 15.97x |
+| 11948 | 58a34f27 | 357.3 | 1.30x | 2.73x | 3.93x | 2.91x | 4.45x | 8.42x | 3.27x | 6.71x |
+| 14107 | 5e8dc11c | 461.1 | 1.27x | 2.37x | 3.44x | 2.58x | 4.01x | 7.50x | 2.98x | 6.03x |
 
 ## Worst workload per run
 
@@ -49,6 +49,9 @@ Speedup = patched PyTorch reference latency / kernel latency, full benchmark (5 
 | autotune_fp8 run1 | 12.19x | 5e8dc11c (14107) | 3.01x |
 | autotune_fp8 run2 | 12.01x | 5e8dc11c (14107) | 2.96x |
 | autotune_fp8 run3 | 12.35x | 5e8dc11c (14107) | 2.98x |
+| autotune_agent run1 | 17.01x | 5e8dc11c (14107) | 5.78x |
+| autotune_agent run2 | 16.93x | 5e8dc11c (14107) | 6.09x |
+| autotune_agent run3 | 17.04x | 5e8dc11c (14107) | 6.03x |
 
 ## Claude vs. best non-ML baseline (autotune), by workload size
 
@@ -101,3 +104,6 @@ FP8 dot = GEMM1 multiplies FP8 values directly on the tensor cores. Sonnet run 1
 | autotune_fp8 run1 | 12.19x | 2 | no | yes | no |
 | autotune_fp8 run2 | 12.01x | 2 | no | yes | no |
 | autotune_fp8 run3 | 12.35x | 2 | no | yes | no |
+| autotune_agent run1 | 17.01x | 2 | no | yes | no |
+| autotune_agent run2 | 16.93x | 2 | no | yes | no |
+| autotune_agent run3 | 17.04x | 2 | no | yes | no |

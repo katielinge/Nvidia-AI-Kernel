@@ -38,7 +38,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import prompts  # noqa: E402
 
-METHODS = ["haiku", "handwritten", "random", "autotune", "autotune_fp8", "sonnet", "opus"]
+METHODS = ["haiku", "handwritten", "random", "autotune", "autotune_fp8", "autotune_agent", "sonnet", "opus"]
 NEW_SIZES = [3, 24, 128, 256, 512, 2048, 4096]
 NEW_OFFSETS = [0, 64, 160, 224, 32, 96, 128]
 OFFSET_SHIFT = 96
@@ -153,11 +153,12 @@ def main():
 
 LABEL = {"haiku": "Haiku", "handwritten": "Hand-written (untuned)", "random": "Random search",
          "autotune": "Triton autotune", "sonnet": "Sonnet", "opus": "Opus",
-         "autotune_fp8": "Autotune + FP8 dot"}
+         "autotune_fp8": "Autotune + FP8 dot",
+         "autotune_agent": "Autotune + agents' ideas"}
 COLOR = {"haiku": "#2a78d6", "handwritten": "#eb6834", "random": "#1baf7a", "autotune": "#eda100",
-         "sonnet": "#e87ba4", "opus": "#008300", "autotune_fp8": "#6250d6"}
+         "sonnet": "#e87ba4", "opus": "#008300", "autotune_fp8": "#6250d6", "autotune_agent": "#a35a00"}
 MARKER = {"haiku": "o", "handwritten": "s", "random": "^", "autotune": "D", "sonnet": "v", "opus": "P",
-          "autotune_fp8": "X"}
+          "autotune_fp8": "X", "autotune_agent": "*"}
 
 
 def report(out_dir: Path, info: dict):

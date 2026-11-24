@@ -30,14 +30,15 @@ OUT = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("results")
 DEF = "moe_fp8_block_scale_ds_routing_topk8_ng8_kg4_e32_h7168_i2048"
 
 # Fixed method order and colors (color follows the method in every figure).
-METHODS = ["haiku", "handwritten", "random", "autotune", "sonnet", "opus", "autotune_fp8"]
+METHODS = ["haiku", "handwritten", "random", "autotune", "sonnet", "opus", "autotune_fp8", "autotune_agent"]
 LABEL = {"haiku": "Haiku", "handwritten": "Hand-written (untuned)", "random": "Random search",
          "autotune": "Triton autotune", "sonnet": "Sonnet", "opus": "Opus",
-         "autotune_fp8": "Autotune + FP8 dot (ablation)"}
+         "autotune_fp8": "Autotune + FP8 dot (ablation)",
+         "autotune_agent": "Autotune + agents' ideas (ablation)"}
 COLOR = {"haiku": "#2a78d6", "handwritten": "#eb6834", "random": "#1baf7a", "autotune": "#eda100",
-         "sonnet": "#e87ba4", "opus": "#008300", "autotune_fp8": "#6250d6"}
+         "sonnet": "#e87ba4", "opus": "#008300", "autotune_fp8": "#6250d6", "autotune_agent": "#a35a00"}
 MARKER = {"haiku": "o", "handwritten": "s", "random": "^", "autotune": "D", "sonnet": "v", "opus": "P",
-          "autotune_fp8": "X"}
+          "autotune_fp8": "X", "autotune_agent": "*"}
 CLAUDE = {"haiku", "sonnet", "opus"}
 INK, INK2, GRID = "#0b0b0b", "#52514e", "#e4e3df"
 

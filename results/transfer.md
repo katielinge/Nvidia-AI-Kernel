@@ -21,6 +21,9 @@ Each run's best kernel, unchanged, on 26 workloads it was never developed or tun
 | autotune_fp8 run1 | 26/26 | 12.28x | 11.87x | none |
 | autotune_fp8 run2 | 26/26 | 12.13x | 11.17x | none |
 | autotune_fp8 run3 | 26/26 | 11.96x | 11.57x | none |
+| autotune_agent run1 | 26/26 | 16.65x | 15.80x | none |
+| autotune_agent run2 | 26/26 | 16.76x | 16.66x | none |
+| autotune_agent run3 | 26/26 | 16.35x | 15.30x | none |
 | sonnet run1 | 26/26 | 16.22x | 15.96x | none |
 | sonnet run2 | 26/26 | 12.94x | 13.06x | none |
 | sonnet run3 | 26/26 | 15.42x | 14.64x | none |
@@ -30,12 +33,12 @@ Each run's best kernel, unchanged, on 26 workloads it was never developed or tun
 
 ## New token counts: speedup by size (median of runs that passed)
 
-| Tokens | Haiku | Hand-written (untuned) | Random search | Triton autotune | Autotune + FP8 dot | Sonnet | Opus |
-|---|---|---|---|---|---|---|---|
-| 3 | 0.71x | 5.76x | 5.46x | 4.93x | 5.18x | 7.34x | 6.42x |
-| 24 | 1.60x | 10.90x | 13.72x | 14.36x | 15.87x | 22.71x | 20.82x |
-| 128 | 1.34x | 8.92x | 14.17x | 14.19x | 15.51x | 21.41x | 26.00x |
-| 256 | 1.34x | 9.58x | 15.29x | 15.62x | 16.62x | 22.50x | 26.99x |
-| 512 | 1.29x | 10.14x | 14.85x | 13.43x | 15.15x | 17.80x | 29.44x |
-| 2048 | 1.25x | 5.46x | 7.48x | 6.13x | 7.18x | 7.54x | 18.95x |
-| 4096 | 1.20x | 4.00x | 5.70x | 4.39x | 5.29x | 6.13x | 11.81x |
+| Tokens | Haiku | Hand-written (untuned) | Random search | Triton autotune | Autotune + FP8 dot | Autotune + agents' ideas | Sonnet | Opus |
+|---|---|---|---|---|---|---|---|---|
+| 3 | 0.71x | 5.76x | 5.46x | 4.93x | 5.18x | 5.02x | 7.34x | 6.42x |
+| 24 | 1.60x | 10.90x | 13.72x | 14.36x | 15.87x | 19.02x | 22.71x | 20.82x |
+| 128 | 1.34x | 8.92x | 14.17x | 14.19x | 15.51x | 21.25x | 21.41x | 26.00x |
+| 256 | 1.34x | 9.58x | 15.29x | 15.62x | 16.62x | 22.86x | 22.50x | 26.99x |
+| 512 | 1.29x | 10.14x | 14.85x | 13.43x | 15.15x | 21.24x | 17.80x | 29.44x |
+| 2048 | 1.25x | 5.46x | 7.48x | 6.13x | 7.18x | 12.34x | 7.54x | 18.95x |
+| 4096 | 1.20x | 4.00x | 5.70x | 4.39x | 5.29x | 9.29x | 6.13x | 11.81x |
