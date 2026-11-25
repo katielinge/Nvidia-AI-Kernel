@@ -194,3 +194,5 @@ report/                final report (Word) and presentation (PowerPoint)
 - The "hand-written" baseline kernel was also drafted with Claude in a chat assistant, outside
   the agent loop: one design, written once, never shown benchmark feedback. It is non-ML in how it
   is tuned (random search and autotune), not in who typed it.
+- AI assistance was also used in drafting the report and slides. All results come from runs on
+  our own hardware, saved in `agent_runs/`.
