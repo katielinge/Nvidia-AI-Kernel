@@ -26,6 +26,7 @@ GPU (8 GB). Median of 3 runs, with the lowest and highest run in brackets.
 | Autotune + FP8 tensor-core dot (non-ML, ablation) | 15 | 12.19x (12.01–12.35) | $0 |
 | Sonnet 5.5 | 15 | 17.54x (14.73–18.00) | $0.98 |
 | Opus 5.5 | 15 | 20.17x (18.46–28.53) | $3.07 |
+| Autotune + the agents' two ideas (ablation, not a baseline) | 15 | 17.01x (16.93–17.04) | $0 |
 
 Against the best non-ML baseline (Triton autotune), Sonnet is 1.52x faster and Opus 1.75x faster.
 Haiku is slower than every baseline: none of its 45 attempts used Triton.
@@ -36,11 +37,25 @@ switches its three design choices back to the baseline's: without them it falls 
 The largest single factor (−21% when removed) is its rewrite of the second matrix multiply as two
 bf16 tensor-core multiplies of a high/low split, which no tile search can reach.
 
-**Transfer.** All 21 best kernels passed 26 workloads they were never developed on; the lead over
-autotune shrank to 1.34x (Sonnet) and 1.65x (Opus) ([results/transfer.md](results/transfer.md)). The full table, with every run, is
-[results/main_table.md](results/main_table.md). The per-workload breakdown and the design features
-of each best kernel are in [results/analysis.md](results/analysis.md), and the transfer test on
-unseen workloads is in [results/transfer.md](results/transfer.md).
+**Given the ideas, autotune matches Sonnet.** With the GEMM2 split and the FP8 dot added to its options,
+plain Triton autotune (same 15 configs, same budget, about 2 minutes) reaches 17.01x, within noise of
+Sonnet's 17.54x: Sonnet's value was proposing the search space, not searching it. Opus stays 1.19x
+ahead of that bar.
+
+**Profile.** [results/profile.md](results/profile.md) and `results/fig6_profile.png` split each call into
+routing, GEMM1, GEMM2 and idle (launch-overhead) time. The agents win on multiply time; Opus run 1's
+GEMM2 is about 4x faster than autotune's at 1,024+ tokens, and Opus run 2 cut kernel launches per call
+from 74 to 10, removing about 1 ms of idle time.
+
+**Transfer and edge cases.** All 24 best kernels passed 26 workloads they were never developed on
+([results/transfer.md](results/transfer.md)) and 11 adversarial ones: skewed and empty expert loads,
+odd sizes, extreme scales ([results/edge_cases.md](results/edge_cases.md)). Sonnet's and Opus's lead over
+autotune shrank to 1.34x and 1.65x on unseen workloads, and every method slows sharply when a few
+experts receive most tokens. The full table, with every run, is [results/main_table.md](results/main_table.md);
+the per-workload breakdown is [results/analysis.md](results/analysis.md).
+
+**Report and slides:** [report/Team3_Final_Report.docx](report/Team3_Final_Report.docx) and
+[report/Team3_Final_Presentation.pptx](report/Team3_Final_Presentation.pptx).
 
 ## Reproduce the main results table
 
@@ -64,7 +79,9 @@ delete or rename `agent_runs/`, then
 ```
 python agent_loop/run_experiments.py      # all agent runs, baselines, final benchmarks, table
 python agent_loop/transfer_test.py        # best kernels on 26 unseen workloads
+python agent_loop/edge_case_test.py       # best kernels on 11 adversarial workloads
 python agent_loop/ablation_knockout.py    # knock-out ablation of Sonnet run 1's kernel
+python agent_loop/profile_kernels.py opus_run2 sonnet_run1   # profiler breakdown
 python agent_loop/analyze_results.py      # figures and per-workload analysis
 ```
 
